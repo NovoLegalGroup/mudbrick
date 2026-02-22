@@ -1,0 +1,102 @@
+/* Mudbrick — Design Tokens */
+
+:root {
+  /* Brand */
+  --mb-brand: #c0392b;
+  --mb-brand-light: #e74c3c;
+  --mb-brand-dark: #96281b;
+
+  /* Surface */
+  --mb-bg: #f5f5f5;
+  --mb-surface: #ffffff;
+  --mb-surface-alt: #eaeaea;
+  --mb-surface-hover: #e0e0e0;
+  --mb-surface-active: #d0d0d0;
+
+  /* Borders */
+  --mb-border: #d0d0d0;
+  --mb-border-light: #e0e0e0;
+
+  /* Text */
+  --mb-text: #1a1a1a;
+  --mb-text-secondary: #666666;
+  --mb-text-muted: #999999;
+  --mb-text-inverse: #ffffff;
+
+  /* Toolbar */
+  --mb-toolbar-bg: #2c2c2c;
+  --mb-toolbar-text: #e0e0e0;
+  --mb-toolbar-hover: #3c3c3c;
+  --mb-toolbar-active: #505050;
+  --mb-toolbar-divider: #444444;
+
+  /* Sidebar */
+  --mb-sidebar-bg: #f0f0f0;
+  --mb-sidebar-thumb-bg: #ffffff;
+  --mb-sidebar-thumb-border: #d0d0d0;
+  --mb-sidebar-thumb-active: var(--mb-brand);
+
+  /* Status bar */
+  --mb-statusbar-bg: #2c2c2c;
+  --mb-statusbar-text: #b0b0b0;
+
+  /* Canvas area */
+  --mb-canvas-bg: #808080;
+
+  /* Toasts */
+  --mb-toast-success: #27ae60;
+  --mb-toast-error: #e74c3c;
+  --mb-toast-warning: #f39c12;
+  --mb-toast-info: #3498db;
+
+  /* Shadows */
+  --mb-shadow-sm: 0 1px 3px rgba(0,0,0,0.12);
+  --mb-shadow-md: 0 4px 12px rgba(0,0,0,0.15);
+  --mb-shadow-lg: 0 8px 24px rgba(0,0,0,0.2);
+
+  /* Radii */
+  --mb-radius-sm: 4px;
+  --mb-radius-md: 8px;
+  --mb-radius-lg: 12px;
+
+  /* Spacing */
+  --mb-toolbar-height: 48px;
+  --mb-statusbar-height: 28px;
+  --mb-sidebar-width: 200px;
+  --mb-pagenav-height: 36px;
+
+  /* Transitions */
+  --mb-transition: 150ms ease;
+
+  /* Z-index layers */
+  --z-pdf-canvas: 1;
+  --z-text-layer: 2;
+  --z-fabric-canvas: 3;
+  --z-toolbar: 100;
+  --z-sidebar: 50;
+  --z-modal: 1000;
+  --z-toast: 1100;
+}
+
+/* Dark mode */
+html[data-theme="dark"] {
+  --mb-bg: #1a1a1a;
+  --mb-surface: #2c2c2c;
+  --mb-surface-alt: #333333;
+  --mb-surface-hover: #3c3c3c;
+  --mb-surface-active: #4a4a4a;
+  --mb-border: #444444;
+  --mb-border-light: #3a3a3a;
+  --mb-text: #e0e0e0;
+  --mb-text-secondary: #aaaaaa;
+  --mb-text-muted: #777777;
+  --mb-toolbar-bg: #1a1a1a;
+  --mb-toolbar-hover: #2a2a2a;
+  --mb-toolbar-active: #3a3a3a;
+  --mb-toolbar-divider: #333333;
+  --mb-sidebar-bg: #222222;
+  --mb-sidebar-thumb-bg: #333333;
+  --mb-sidebar-thumb-border: #444444;
+  --mb-statusbar-bg: #1a1a1a;
+  --mb-canvas-bg: #555555;
+}

@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mudbrick — Free PDF Editor</title>
+  <meta name="description" content="Free, open-source PDF editor. No subscription. No dark patterns. Runs entirely in your browser.">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles/variables.css">
+  <link rel="stylesheet" href="styles/layout.css">
+  <link rel="stylesheet" href="styles/components.css">
+
+  <!-- CDN: pdf-lib (UMD, sets window.PDFLib) -->
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <!-- CDN: Fabric.js 5.3 (IIFE, sets window.fabric) -->
+  <script src="https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js"></script>
+
+  <!-- Favicon (brick emoji) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧱</text></svg>">
+</head>
+<body>
+
+  <!-- ═══════════════════ Welcome Screen ═══════════════════ -->
+  <div id="welcome-screen">
+    <div class="welcome-content">
+      <h1>🧱 Mudbrick</h1>
+      <p class="tagline">Free PDF editor. No subscription. No dark patterns.</p>
+
+      <div id="drop-zone">
+        <div class="drop-icon">📄</div>
+        <div class="drop-text">Drop a PDF here</div>
+        <div class="drop-or">or</div>
+        <button class="btn-primary" id="open-file-btn">Open File</button>
+        <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg" hidden>
+      </div>
+
+      <div class="welcome-features">
+        <span>View &amp; Navigate</span>
+        <span>Annotate &amp; Draw</span>
+        <span>Merge &amp; Split</span>
+        <span>Fill Forms</span>
+        <span>Visual Cover</span>
+        <span>Watermark</span>
+        <span>100% Client-Side</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ App Shell ═══════════════════ -->
+  <div id="app" class="hidden">
+
+    <!-- ── Toolbar ── -->
+    <header id="toolbar">
+      <!-- File actions -->
+      <div class="toolbar-group file-actions">
+        <button id="btn-open" title="Open PDF (Ctrl+O)">📂 Open</button>
+        <button id="btn-merge" title="Merge PDFs" disabled>🔗 Merge</button>
+        <button id="btn-split" title="Split PDF" disabled>✂️ Split</button>
+      </div>
+
+      <div class="toolbar-separator"></div>
+
+      <!-- Annotation tools -->
+      <div class="toolbar-group annotation-tools">
+        <button id="btn-select" class="tool-btn active" data-tool="select" title="Select (V)">↖ Select</button>
+        <button id="btn-hand" class="tool-btn" data-tool="hand" title="Hand (H)">✋ Hand</button>
+        <button id="btn-text" class="tool-btn" data-tool="text" title="Text (T)" disabled>T Text</button>
+        <button id="btn-draw" class="tool-btn" data-tool="draw" title="Draw (D)" disabled>✏️ Draw</button>
+        <button id="btn-highlight" class="tool-btn" data-tool="highlight" title="Highlight" disabled>🖍️ Highlight</button>
+        <button id="btn-shape" class="tool-btn" data-tool="shape" title="Shape" disabled>⬜ Shape</button>
+        <button id="btn-stamp" class="tool-btn" data-tool="stamp" title="Stamp" disabled>📌 Stamp</button>
+        <button id="btn-cover" class="tool-btn" data-tool="cover" title="Visual Cover" disabled>█ Cover</button>
+        <button id="btn-watermark" title="Watermark" disabled>💧 Watermark</button>
+      </div>
+
+      <div class="toolbar-separator"></div>
+
+      <!-- Zoom controls -->
+      <div class="toolbar-group zoom-controls">
+        <button id="btn-zoom-out" title="Zoom Out (-)">−</button>
+        <button id="btn-zoom-level" title="Click to reset">100%</button>
+        <button id="btn-zoom-in" title="Zoom In (+)">+</button>
+        <button id="btn-fit-width" title="Fit Width">↔️</button>
+        <button id="btn-fit-page" title="Fit Page">⬜</button>
+      </div>
+
+      <div class="toolbar-separator"></div>
+
+      <!-- Right actions -->
+      <div class="toolbar-group right-actions">
+        <button id="btn-dark-mode" title="Toggle Dark Mode">🌙</button>
+        <button id="btn-export" title="Export (Ctrl+S)" disabled>💾 Export</button>
+      </div>
+    </header>
+
+    <!-- ── Main Container ── -->
+    <div id="main-container">
+
+      <!-- Sidebar: Page Thumbnails -->
+      <aside id="sidebar">
+        <div id="sidebar-header">
+          <span>Pages</span>
+          <button id="btn-toggle-sidebar" title="Toggle Sidebar">◀</button>
+        </div>
+        <div id="thumbnail-list"></div>
+      </aside>
+
+      <!-- Canvas Area -->
+      <main id="canvas-area">
+        <div id="page-container">
+          <canvas id="pdf-canvas"></canvas>
+          <div id="text-layer"></div>
+          <div id="fabric-canvas-wrapper">
+            <canvas id="fabric-canvas"></canvas>
+          </div>
+        </div>
+      </main>
+
+      <!-- Properties Panel (Phase 4+) -->
+      <aside id="properties-panel" class="hidden"></aside>
+    </div>
+
+    <!-- ── Page Navigation ── -->
+    <div id="page-nav">
+      <button id="btn-prev-page" title="Previous Page (←)" disabled>◀</button>
+      <input id="page-input" type="number" min="1" value="1">
+      <span>of <span id="total-pages">0</span></span>
+      <button id="btn-next-page" title="Next Page (→)" disabled>▶</button>
+    </div>
+
+    <!-- ── Status Bar ── -->
+    <footer id="status-bar">
+      <span id="status-filename">No file loaded</span>
+      <span class="status-separator"></span>
+      <span id="status-pages"></span>
+      <span class="status-separator"></span>
+      <span id="status-zoom">100%</span>
+      <span class="status-separator"></span>
+      <span id="status-filesize"></span>
+    </footer>
+  </div>
+
+  <!-- ═══════════════════ Toast Container ═══════════════════ -->
+  <div id="toast-container"></div>
+
+  <!-- ═══════════════════ Loading Overlay ═══════════════════ -->
+  <div id="loading-overlay" class="hidden">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- ═══════════════════ Merge Modal ═══════════════════ -->
+  <div id="merge-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Merge PDFs</h2>
+        <button class="modal-close" data-close-modal="merge">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="merge-drop-zone" style="border:2px dashed var(--mb-border);border-radius:var(--mb-radius-md);padding:24px;text-align:center;margin-bottom:16px;cursor:pointer;">
+          <p style="color:var(--mb-text-secondary);">Drop PDF files here or click to add</p>
+          <input type="file" id="merge-file-input" accept=".pdf" multiple hidden>
+        </div>
+        <ul class="file-list" id="merge-file-list"></ul>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="merge">Cancel</button>
+        <button class="btn-primary" id="btn-merge-execute" disabled>Merge Files</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Split Modal ═══════════════════ -->
+  <div id="split-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Split PDF</h2>
+        <button class="modal-close" data-close-modal="split">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom:12px;color:var(--mb-text-secondary);font-size:13px;">
+          Enter page ranges separated by commas. Example: 1-3, 5, 7-12
+        </p>
+        <input type="text" id="split-range-input"
+          style="width:100%;padding:8px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);font-size:14px;background:var(--mb-surface);color:var(--mb-text);"
+          placeholder="e.g. 1-3, 5, 7-12">
+        <div id="split-preview" style="margin-top:12px;font-size:13px;color:var(--mb-text-secondary);"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="split">Cancel</button>
+        <button class="btn-primary" id="btn-split-execute" disabled>Split</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ App Entry Point (ES Module) ═══════════════════ -->
+  <script type="module" src="js/app.js"></script>
+
+</body>
+</html>
