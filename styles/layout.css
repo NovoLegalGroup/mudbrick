@@ -1626,6 +1626,7 @@ html, body {
 
 /* ── Responsive ── */
 
+/* Tablet (≤ 768px): overlay sidebar, hide menu items, compact ribbon */
 @media (max-width: 768px) {
   #sidebar {
     position: absolute;
@@ -1668,11 +1669,56 @@ html, body {
   .ribbon-btn span:not(.ribbon-icon) {
     display: none;
   }
+
+  /* Hide properties panel — too narrow to fit */
+  #properties-panel {
+    display: none;
+  }
+
+  /* Find bar: responsive width */
+  .find-input {
+    width: 140px;
+  }
+
+  /* Floating toolbar: ensure it doesn't overlap page nav */
+  .floating-toolbar {
+    bottom: 52px;
+  }
+
+  /* Text edit toolbar: position below ribbon instead of fixed */
+  .text-edit-toolbar {
+    top: 110px;
+    max-width: 95vw;
+  }
+
+  /* Crop bar: avoid status bar overlap */
+  .crop-bar {
+    bottom: 52px;
+  }
+
+  /* Touch targets: increase button sizes */
+  .float-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .page-nav-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .find-nav-btn,
+  .find-close-btn {
+    width: 32px;
+    height: 32px;
+  }
 }
 
+/* Phone (≤ 480px): collapse ribbon labels, shrink sidebar, compact nav */
 @media (max-width: 480px) {
   #ribbon-tabs {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .ribbon-tab {
@@ -1682,6 +1728,63 @@ html, body {
 
   #sidebar {
     width: 160px;
+  }
+
+  /* Compact ribbon panel */
+  #ribbon-panel {
+    min-height: 56px;
+  }
+
+  .ribbon-group {
+    padding: 0 6px;
+  }
+
+  /* Find bar: stack tighter */
+  .find-input {
+    width: 100px;
+  }
+
+  .find-match-count {
+    display: none;
+  }
+
+  .find-case-toggle {
+    display: none;
+  }
+
+  /* Welcome screen: tighter */
+  .welcome-content {
+    padding: 16px 12px;
+  }
+
+  .welcome-content h1 {
+    font-size: 26px;
+  }
+
+  .welcome-content .tagline {
+    font-size: 14px;
+  }
+
+  .welcome-features span {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  /* Status bar: compact */
+  #status-bar {
+    font-size: 10px;
+    padding: 0 8px;
+    gap: 4px;
+  }
+
+  /* Page nav: compact */
+  #page-nav {
+    gap: 2px;
+    font-size: 11px;
+  }
+
+  .page-nav-sep {
+    margin: 0 4px;
   }
 }
 
