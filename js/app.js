@@ -21,7 +21,7 @@ import {
 import {
   resetPdfLib, ensurePdfLib, rotatePage, deletePage,
   reorderPages, mergePDFs, splitPDF, addWatermark, appendPages,
-  insertBlankPage, cropPages, getPageDimensions,
+  insertBlankPage, cropPages, getPageDimensions, replacePages,
 } from './pdf-edit.js';
 
 import {
@@ -58,6 +58,26 @@ import {
   runOCR, hasOCRResults, renderOCRTextLayer, getOCRTextEntries,
   clearOCRResults, terminateOCR,
 } from './ocr.js';
+
+import { encryptPDF, removeMetadata, getMetadata, setMetadata, sanitizeDocument } from './security.js';
+import { REDACTION_PATTERNS, searchPatterns } from './redact-patterns.js';
+import { exportPagesToImages, createPDFFromImages, optimizePDF } from './export-image.js';
+import {
+  addFormField, removeFormField, getTabOrder, setTabOrder,
+  exportFormDataJSON, importFormDataJSON, exportFormDataXFDF,
+  importFormDataXFDF, exportFormDataCSV, importFormDataCSV,
+  flattenFormFields,
+} from './form-creator.js';
+import {
+  exportCommentsText, exportCommentsJSON, exportCommentsCSV,
+  getAnnotationStats, flattenAnnotations,
+} from './comment-summary.js';
+import { compareDocuments, generateCompareReport, renderComparisonView } from './doc-compare.js';
+import { pushDocState, undoDoc, redoDoc, canUndoDoc, canRedoDoc, clearDocHistory } from './doc-history.js';
+import { canUndo, canRedo } from './history.js';
+import { enterTextEditMode, exitTextEditMode, commitTextEdits, isTextEditActive, enterImageEditMode, exitImageEditMode, commitImageEdits, isImageEditActive } from './text-edit.js';
+import { addExhibitStamp, setExhibitOptions, resetExhibitCount, countExistingExhibits, EXHIBIT_FORMATS } from './exhibit-stamps.js';
+import { setLabelRange, getPageLabel, getLabelRanges, clearLabels, removeLabelRange, previewLabels, LABEL_FORMATS } from './page-labels.js';
 
 /* ═══════════════════ State ═══════════════════ */
 
@@ -109,6 +129,10 @@ const DOM = {
   btnFirst: $('btn-first-page'),
   btnLast: $('btn-last-page'),
   propertiesPanel: $('properties-panel'),
+  btnUndo: $('btn-undo'),
+  btnRedo: $('btn-redo'),
+  btnEditText: $('btn-edit-text'),
+  btnEditImage: $('btn-edit-image'),
 };
 
 /* ═══════════════════ Initialization ═══════════════════ */
@@ -263,18 +287,30 @@ function formatTimeAgo(timestamp) {
 async function handleFiles(files) {
   if (!files || files.length === 0) return;
   const file = files[0]; // Open first file
-  if (!file.name.toLowerCase().endsWith('.pdf')) {
-    toast('Please select a PDF file.', 'warning');
+  const name = file.name.toLowerCase();
+  const isImage = /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i.test(name) ||
+                  file.type.startsWith('image/');
+
+  if (!name.endsWith('.pdf') && !isImage) {
+    toast('Please select a PDF or image file.', 'warning');
     return;
   }
+
   showLoading();
   try {
-    const bytes = await readFileAsArrayBuffer(file);
-    await openPDF(bytes, file.name, file.size);
-    toast(`Opened ${file.name}`, 'success');
+    if (isImage) {
+      const pdfBytes = await createPDFFromImages([file], { pageSize: 'fit' });
+      const pdfName = file.name.replace(/\.[^.]+$/, '.pdf');
+      await openPDF(pdfBytes, pdfName, pdfBytes.length);
+      toast(`Opened ${file.name} as PDF`, 'success');
+    } else {
+      const bytes = await readFileAsArrayBuffer(file);
+      await openPDF(bytes, file.name, file.size);
+      toast(`Opened ${file.name}`, 'success');
+    }
   } catch (e) {
     console.error('Failed to open file:', e);
-    toast('Failed to open PDF. The file may be corrupted or password-protected.', 'error');
+    toast('Failed to open file. It may be corrupted or unsupported.', 'error');
   } finally {
     hideLoading();
   }
@@ -286,9 +322,16 @@ async function openPDF(bytes, fileName, fileSize) {
   resetFormState();
   clearTextIndex();
   clearOCRResults();
+  clearDocHistory();
   State.pageAnnotations = {};
   State.formFields = [];
   State.pdfLibDoc = null;
+
+  // Destroy old PDF.js document to release resources
+  if (State.pdfDoc) {
+    try { State.pdfDoc.destroy(); } catch (_) { /* ignore */ }
+    State.pdfDoc = null;
+  }
 
   // Load with PDF.js
   const pdfDoc = await loadDocument(bytes);
@@ -325,11 +368,43 @@ async function openPDF(bytes, fileName, fileSize) {
   $('btn-export').disabled = false;
 
   // Edit ribbon buttons
+  $('btn-edit-text').disabled = false;
+  if ($('btn-edit-image')) $('btn-edit-image').disabled = false;
   $('btn-insert-blank').disabled = false;
   $('btn-bates').disabled = false;
   $('btn-headers-footers').disabled = false;
   $('btn-crop-page').disabled = false;
+  $('btn-page-labels').disabled = false;
+  $('btn-replace-pages').disabled = false;
   $('btn-ocr').disabled = false;
+
+  // Annotate ribbon — exhibit stamp
+  $('btn-exhibit-stamp').disabled = false;
+
+  // Security ribbon buttons
+  $('btn-encrypt').disabled = false;
+  $('btn-metadata').disabled = false;
+  $('btn-redact-search').disabled = false;
+  $('btn-sanitize').disabled = false;
+
+  // Tools ribbon buttons
+  $('btn-export-image').disabled = false;
+  $('btn-optimize').disabled = false;
+  $('btn-compare').disabled = false;
+  $('btn-comment-summary').disabled = false;
+  $('btn-flatten-annotations').disabled = false;
+
+  // Forms ribbon buttons
+  $('btn-form-text').disabled = false;
+  $('btn-form-checkbox').disabled = false;
+  $('btn-form-dropdown').disabled = false;
+  $('btn-form-radio').disabled = false;
+  $('btn-form-signature').disabled = false;
+  $('btn-form-button').disabled = false;
+  $('btn-form-import').disabled = false;
+  $('btn-form-export').disabled = false;
+  $('btn-form-tab-order').disabled = false;
+  $('btn-form-flatten').disabled = false;
 
   // Enable all tool-btn instances across ribbons (Annotate ribbon has duplicates without IDs)
   document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => { btn.disabled = false; });
@@ -381,6 +456,10 @@ async function openPDF(bytes, fileName, fileSize) {
 
 async function renderCurrentPage() {
   if (!State.pdfDoc) return;
+
+  // Exit edit modes when navigating to a different page
+  if (isTextEditActive()) exitTextEditMode();
+  if (isImageEditActive()) exitImageEditMode();
 
   // Save annotations from the page we're leaving
   if (State._prevPage && State._prevPage !== State.currentPage) {
@@ -449,6 +528,8 @@ async function renderCurrentPage() {
       cleanupPage(State.pdfDoc, i);
     }
   }
+
+  updateUndoRedoButtons();
 }
 
 /* ═══════════════════ Navigation ═══════════════════ */
@@ -536,7 +617,7 @@ function generateThumbnails() {
     item.dataset.page = i;
     item.innerHTML = `
       <div class="thumbnail-placeholder">${i}</div>
-      <span class="page-number">${i}</span>
+      <span class="page-number">${getPageLabel(i)}</span>
     `;
     item.addEventListener('click', () => goToPage(i));
     item.addEventListener('contextmenu', e => showContextMenu(e, i));
@@ -592,9 +673,21 @@ function highlightActiveThumbnail() {
  * After pdf-lib modifies the document and returns new bytes,
  * reload into PDF.js so the user sees the changes.
  */
-async function reloadAfterEdit(newBytes) {
+async function reloadAfterEdit(newBytes, { skipHistory = false } = {}) {
+  // Save current bytes for document-level undo (unless this IS an undo/redo)
+  if (!skipHistory && State.pdfBytes) {
+    pushDocState(State.pdfBytes);
+  }
+
   resetPdfLib(); // clear cached pdf-lib doc so next edit re-loads
   clearFormOverlay();
+
+  // Destroy old PDF.js document to release cached pages & prevent stale renders
+  if (State.pdfDoc) {
+    try { State.pdfDoc.destroy(); } catch (_) { /* ignore */ }
+    State.pdfDoc = null;
+  }
+
   const pdfDoc = await loadDocument(newBytes);
 
   State.pdfDoc = pdfDoc;
@@ -621,10 +714,143 @@ async function reloadAfterEdit(newBytes) {
   updateStatusBar();
   updatePageNav();
   await renderCurrentPage();
-  generateThumbnails();
+
+  // Defer thumbnail generation so it doesn't race with the main canvas render
+  // (renderThumbnail calls page.cleanup() which could interfere)
+  setTimeout(() => generateThumbnails(), 50);
 
   // Rebuild text index for Find
   buildTextIndex(State.pdfDoc);
+  updateUndoRedoButtons();
+}
+
+/* ═══════════════════ Undo / Redo (unified) ═══════════════════ */
+
+function updateUndoRedoButtons() {
+  if (DOM.btnUndo) {
+    DOM.btnUndo.disabled = !(canUndoDoc() || canUndo(State.currentPage));
+  }
+  if (DOM.btnRedo) {
+    DOM.btnRedo.disabled = !(canRedoDoc() || canRedo(State.currentPage));
+  }
+}
+
+async function handleUndo() {
+  // Try document-level undo first (more impactful: text edits, insert page, crop…)
+  if (canUndoDoc()) {
+    const prevBytes = undoDoc(State.pdfBytes);
+    if (prevBytes) {
+      await reloadAfterEdit(prevBytes, { skipHistory: true });
+      toast('Undo successful');
+    }
+    updateUndoRedoButtons();
+    return;
+  }
+  // Fall back to annotation undo
+  if (canUndo(State.currentPage)) {
+    undoAnnotation();
+    updateUndoRedoButtons();
+  }
+}
+
+async function handleRedo() {
+  // Try document-level redo first
+  if (canRedoDoc()) {
+    const nextBytes = redoDoc(State.pdfBytes);
+    if (nextBytes) {
+      await reloadAfterEdit(nextBytes, { skipHistory: true });
+      toast('Redo successful');
+    }
+    updateUndoRedoButtons();
+    return;
+  }
+  // Fall back to annotation redo
+  if (canRedo(State.currentPage)) {
+    redoAnnotation();
+    updateUndoRedoButtons();
+  }
+}
+
+/* ═══════════════════ Text Editing ═══════════════════ */
+
+function handleEditText() {
+  if (!State.pdfDoc) return;
+  if (isTextEditActive()) {
+    exitTextEditMode();
+    DOM.btnEditText.classList.remove('active');
+    return;
+  }
+  enterTextEditMode(State.currentPage, State.pdfDoc, State._viewport, DOM.textLayer)
+    .then(ok => {
+      if (ok) DOM.btnEditText.classList.add('active');
+    });
+}
+
+async function handleCommitTextEdits() {
+  if (!isTextEditActive()) return;
+  try {
+    showLoading('Applying text edits…');
+    const newBytes = await commitTextEdits(State.pdfBytes, State.currentPage);
+    if (newBytes) {
+      await reloadAfterEdit(newBytes);
+      toast('Text edits applied');
+    } else {
+      toast('No changes to apply', 'info');
+    }
+  } catch (err) {
+    console.error('Text edit commit failed:', err);
+    toast('Text edit failed: ' + err.message, 'error');
+  } finally {
+    exitTextEditMode();
+    DOM.btnEditText.classList.remove('active');
+    hideLoading();
+  }
+}
+
+function handleCancelTextEdits() {
+  exitTextEditMode();
+  DOM.btnEditText.classList.remove('active');
+}
+
+/* ═══════════════════ Image Editing ═══════════════════ */
+
+function handleEditImage() {
+  if (!State.pdfDoc) return;
+  if (isImageEditActive()) {
+    exitImageEditMode();
+    DOM.btnEditImage.classList.remove('active');
+    return;
+  }
+  enterImageEditMode(State.currentPage, State.pdfDoc, State._viewport, DOM.textLayer)
+    .then(ok => {
+      if (ok) DOM.btnEditImage.classList.add('active');
+    });
+}
+
+async function handleCommitImageEdits() {
+  if (!isImageEditActive()) return;
+  try {
+    showLoading('Applying image edits…');
+    const newBytes = await commitImageEdits(State.pdfBytes, State.currentPage);
+    if (newBytes) {
+      await reloadAfterEdit(newBytes);
+      toast('Image edits applied');
+    } else {
+      toast('No changes to apply', 'info');
+    }
+  } catch (err) {
+    console.error('Image edit commit failed:', err);
+    toast('Image edit failed: ' + err.message, 'error');
+  } finally {
+    exitImageEditMode();
+    DOM.btnEditImage.classList.remove('active');
+    hideLoading();
+  }
+}
+
+function handleCancelImageEdits() {
+  exitImageEditMode();
+  DOM.btnEditImage.classList.remove('active');
 }
 
 /* ═══════════════════ Find Bar ═══════════════════ */
@@ -1576,29 +1802,181 @@ async function executeHeadersFooters() {
   }
 }
 
-/* ═══════════════════ Page Crop Modal ═══════════════════ */
+/* ═══════════════════ Visual Page Crop ═══════════════════ */
+
+// Crop state
+const cropState = {
+  active: false,
+  pageW: 0,       // page width in CSS px (at current zoom)
+  pageH: 0,       // page height in CSS px
+  pdfW: 0,        // page width in PDF points
+  pdfH: 0,        // page height in PDF points
+  // Selection rect in CSS px (relative to page-container)
+  x: 0, y: 0, w: 0, h: 0,
+};
 
 async function openCropModal() {
-  $('crop-modal-backdrop').classList.remove('hidden');
-  // Reset fields
-  $('crop-top').value = 0;
-  $('crop-bottom').value = 0;
-  $('crop-left').value = 0;
-  $('crop-right').value = 0;
-  // Show current page dimensions
-  try {
-    const dims = await getPageDimensions(State.pdfBytes, State.currentPage - 1);
-    const wIn = (dims.width / 72).toFixed(2);
-    const hIn = (dims.height / 72).toFixed(2);
-    $('crop-page-info').textContent = `Page ${State.currentPage}: ${Math.round(dims.width)} × ${Math.round(dims.height)} pt (${wIn}" × ${hIn}")`;
-  } catch {
-    $('crop-page-info').textContent = `Page ${State.currentPage}`;
-  }
-  replaceIcons();
+  if (!State.pdfBytes || cropState.active) return;
+
+  // Get page dimensions
+  const dims = await getPageDimensions(State.pdfBytes, State.currentPage - 1);
+  cropState.pdfW = dims.width;
+  cropState.pdfH = dims.height;
+
+  // Get rendered page size
+  const canvas = DOM.pdfCanvas;
+  cropState.pageW = canvas.clientWidth;
+  cropState.pageH = canvas.clientHeight;
+
+  // Default crop: inset 10% from each edge
+  const inset = 0.05;
+  cropState.x = Math.round(cropState.pageW * inset);
+  cropState.y = Math.round(cropState.pageH * inset);
+  cropState.w = Math.round(cropState.pageW * (1 - 2 * inset));
+  cropState.h = Math.round(cropState.pageH * (1 - 2 * inset));
+  cropState.active = true;
+
+  // Show overlay & bar
+  $('crop-overlay').classList.remove('hidden');
+  $('crop-bar').classList.remove('hidden');
+  updateCropOverlay();
+  updateCropInfo();
 }
 
 function closeCropModal() {
+  cropState.active = false;
+  $('crop-overlay').classList.add('hidden');
+  $('crop-bar').classList.add('hidden');
   $('crop-modal-backdrop').classList.add('hidden');
+}
+
+function updateCropOverlay() {
+  const { x, y, w, h, pageW, pageH } = cropState;
+  const sel = $('crop-overlay').querySelector('.crop-selection');
+
+  // Position selection box
+  sel.style.left = x + 'px';
+  sel.style.top = y + 'px';
+  sel.style.width = w + 'px';
+  sel.style.height = h + 'px';
+
+  // Position shade panels
+  const shadeT = $('crop-overlay').querySelector('.crop-shade-top');
+  const shadeB = $('crop-overlay').querySelector('.crop-shade-bottom');
+  const shadeL = $('crop-overlay').querySelector('.crop-shade-left');
+  const shadeR = $('crop-overlay').querySelector('.crop-shade-right');
+
+  shadeT.style.height = y + 'px';
+
+  shadeB.style.top = (y + h) + 'px';
+  shadeB.style.height = (pageH - y - h) + 'px';
+
+  shadeL.style.top = y + 'px';
+  shadeL.style.width = x + 'px';
+  shadeL.style.height = h + 'px';
+
+  shadeR.style.top = y + 'px';
+  shadeR.style.left = (x + w) + 'px';
+  shadeR.style.width = (pageW - x - w) + 'px';
+  shadeR.style.height = h + 'px';
+}
+
+function updateCropInfo() {
+  const { x, y, w, h, pageW, pageH, pdfW, pdfH } = cropState;
+  // Convert CSS px crop margins to PDF points
+  const scaleX = pdfW / pageW;
+  const scaleY = pdfH / pageH;
+  const topPt = Math.round(y * scaleY);
+  const leftPt = Math.round(x * scaleX);
+  const bottomPt = Math.round((pageH - y - h) * scaleY);
+  const rightPt = Math.round((pageW - x - w) * scaleX);
+
+  $('crop-top').value = topPt;
+  $('crop-bottom').value = bottomPt;
+  $('crop-left').value = leftPt;
+  $('crop-right').value = rightPt;
+
+  const wIn = ((pdfW - leftPt - rightPt) / 72).toFixed(1);
+  const hIn = ((pdfH - topPt - bottomPt) / 72).toFixed(1);
+  $('crop-bar-info').textContent = `Crop: ${wIn}" × ${hIn}" — T:${topPt} B:${bottomPt} L:${leftPt} R:${rightPt} pt`;
+}
+
+function setCropFromPreset(topPt, bottomPt, leftPt, rightPt) {
+  const { pageW, pageH, pdfW, pdfH } = cropState;
+  const scaleX = pageW / pdfW;
+  const scaleY = pageH / pdfH;
+
+  cropState.x = Math.round(leftPt * scaleX);
+  cropState.y = Math.round(topPt * scaleY);
+  cropState.w = Math.round((pdfW - leftPt - rightPt) * scaleX);
+  cropState.h = Math.round((pdfH - topPt - bottomPt) * scaleY);
+
+  updateCropOverlay();
+  updateCropInfo();
+}
+
+function initCropDragHandlers() {
+  const overlay = $('crop-overlay');
+  const sel = overlay.querySelector('.crop-selection');
+  let dragMode = null; // 'move' | handle name
+  let startMX = 0, startMY = 0;
+  let startRect = {};
+
+  overlay.addEventListener('mousedown', e => {
+    if (!cropState.active) return;
+    const handle = e.target.closest('.crop-handle');
+    if (handle) {
+      dragMode = handle.dataset.handle;
+    } else if (e.target.closest('.crop-selection')) {
+      dragMode = 'move';
+    } else {
+      return;
+    }
+    startMX = e.clientX;
+    startMY = e.clientY;
+    startRect = { x: cropState.x, y: cropState.y, w: cropState.w, h: cropState.h };
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!dragMode || !cropState.active) return;
+    const dx = e.clientX - startMX;
+    const dy = e.clientY - startMY;
+    const { pageW, pageH } = cropState;
+    const MIN = 20;
+
+    let { x, y, w, h } = startRect;
+
+    if (dragMode === 'move') {
+      x = Math.max(0, Math.min(pageW - w, x + dx));
+      y = Math.max(0, Math.min(pageH - h, y + dy));
+    } else {
+      // Handle resize
+      if (dragMode.includes('w')) { x += dx; w -= dx; }
+      if (dragMode.includes('e')) { w += dx; }
+      if (dragMode.includes('n')) { y += dy; h -= dy; }
+      if (dragMode.includes('s')) { h += dy; }
+
+      // Enforce minimums and bounds
+      if (w < MIN) { w = MIN; if (dragMode.includes('w')) x = startRect.x + startRect.w - MIN; }
+      if (h < MIN) { h = MIN; if (dragMode.includes('n')) y = startRect.y + startRect.h - MIN; }
+      if (x < 0) { w += x; x = 0; }
+      if (y < 0) { h += y; y = 0; }
+      if (x + w > pageW) w = pageW - x;
+      if (y + h > pageH) h = pageH - y;
+    }
+
+    cropState.x = x;
+    cropState.y = y;
+    cropState.w = w;
+    cropState.h = h;
+    updateCropOverlay();
+    updateCropInfo();
+  });
+
+  document.addEventListener('mouseup', () => {
+    dragMode = null;
+  });
 }
 
 async function executeCrop() {
@@ -1610,7 +1988,7 @@ async function executeCrop() {
   const right = parseFloat($('crop-right').value) || 0;
 
   if (top === 0 && bottom === 0 && left === 0 && right === 0) {
-    toast('Enter at least one crop margin', 'warning');
+    toast('Adjust the crop area before applying', 'warning');
     return;
   }
 
@@ -1685,15 +2063,22 @@ async function handleAddPages(files, insertAfter) {
     const additions = [];
     let totalNewPages = 0;
     for (const file of files) {
-      if (!file.name.toLowerCase().endsWith('.pdf')) continue;
-      const bytes = await readFileAsArrayBuffer(file);
-      // Count pages in the donor
+      const name = file.name.toLowerCase();
+      const isImage = /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i.test(name) || file.type.startsWith('image/');
+      let bytes;
+      if (name.endsWith('.pdf')) {
+        bytes = await readFileAsArrayBuffer(file);
+      } else if (isImage) {
+        bytes = await createPDFFromImages([file], { pageSize: 'fit' });
+      } else {
+        continue;
+      }
       const donor = await window.PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
       totalNewPages += donor.getPageCount();
       additions.push({ bytes });
     }
     if (additions.length === 0) {
-      toast('No valid PDF files found', 'warning');
+      toast('No valid PDF or image files found', 'warning');
       return;
     }
     const newBytes = await appendPages(State.pdfBytes, additions, insertAfter);
@@ -1862,6 +2247,68 @@ function wireEvents() {
     e.target.value = ''; // reset so same file can be reopened
   });
 
+  // Draggable floating toolbar
+  {
+    const ftbar = $('floating-toolbar');
+    let dragging = false, startX = 0, startY = 0, origLeft = 0, origTop = 0;
+
+    ftbar.addEventListener('mousedown', e => {
+      // Don't drag if clicking a tool button
+      if (e.target.closest('.float-btn')) return;
+      dragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      const rect = ftbar.getBoundingClientRect();
+      const parentRect = ftbar.offsetParent.getBoundingClientRect();
+      origLeft = rect.left - parentRect.left;
+      origTop = rect.top - parentRect.top;
+      ftbar.classList.add('is-dragging');
+      // Remove centering transform on first drag
+      ftbar.style.transform = 'none';
+      ftbar.style.left = origLeft + 'px';
+      ftbar.style.top = origTop + 'px';
+      ftbar.style.bottom = 'auto';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      ftbar.style.left = (origLeft + dx) + 'px';
+      ftbar.style.top = (origTop + dy) + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      ftbar.classList.remove('is-dragging');
+    });
+  }
+
+  // Undo / Redo
+  DOM.btnUndo.addEventListener('click', handleUndo);
+  DOM.btnRedo.addEventListener('click', handleRedo);
+
+  // Edit Text
+  DOM.btnEditText.addEventListener('click', handleEditText);
+
+  // Edit Image
+  if (DOM.btnEditImage) DOM.btnEditImage.addEventListener('click', handleEditImage);
+
+  // Text/Image edit toolbar (event delegation on page container)
+  DOM.pageContainer.addEventListener('click', e => {
+    if (e.target.classList.contains('text-edit-commit')) {
+      handleCommitTextEdits();
+    } else if (e.target.classList.contains('text-edit-cancel')) {
+      handleCancelTextEdits();
+    } else if (e.target.classList.contains('image-edit-commit-btn')) {
+      handleCommitImageEdits();
+    } else if (e.target.classList.contains('image-edit-cancel-btn')) {
+      handleCancelImageEdits();
+    }
+  });
+
   // Page navigation
   DOM.btnFirst.addEventListener('click', firstPage);
   DOM.btnPrev.addEventListener('click', prevPage);
@@ -1933,6 +2380,24 @@ function wireEvents() {
       if (modal === 'crop') closeCropModal();
       if (modal === 'signature') closeSignatureModal();
       if (modal === 'ocr') $('ocr-modal-backdrop').classList.add('hidden');
+      if (modal === 'encrypt') $('encrypt-modal-backdrop').classList.add('hidden');
+      if (modal === 'metadata') $('metadata-modal-backdrop').classList.add('hidden');
+      if (modal === 'redact-search') $('redact-search-modal-backdrop').classList.add('hidden');
+      if (modal === 'export-image') $('export-image-modal-backdrop').classList.add('hidden');
+      if (modal === 'create-from-images') $('create-from-images-modal-backdrop').classList.add('hidden');
+      if (modal === 'optimize') $('optimize-modal-backdrop').classList.add('hidden');
+      if (modal === 'compare') $('compare-modal-backdrop').classList.add('hidden');
+      if (modal === 'comment-summary') $('comment-summary-modal-backdrop').classList.add('hidden');
+      if (modal === 'form-data') $('form-data-modal-backdrop').classList.add('hidden');
+      if (modal === 'exhibit') $('exhibit-modal-backdrop').classList.add('hidden');
+      if (modal === 'sanitize') $('sanitize-modal-backdrop').classList.add('hidden');
+      if (modal === 'page-labels') {
+        $('page-labels-modal-backdrop').classList.add('hidden');
+        // Restore previously saved ranges on cancel
+        clearLabels();
+        _savedLabelRanges.forEach(r => setLabelRange(r.startPage, r.endPage, r.format, r.prefix, r.startNum));
+      }
+      if (modal === 'replace-pages') $('replace-pages-modal-backdrop').classList.add('hidden');
     });
   });
 
@@ -2054,16 +2519,21 @@ function wireEvents() {
     }
   });
 
-  // Crop modal
+  // Visual Crop
   $('btn-crop-page').addEventListener('click', openCropModal);
   $('btn-crop-execute').addEventListener('click', executeCrop);
-  // Preset buttons
+  $('btn-crop-cancel').addEventListener('click', closeCropModal);
+  initCropDragHandlers();
+  // Preset buttons set crop from PDF-point values
   document.querySelectorAll('.crop-preset').forEach(btn => {
     btn.addEventListener('click', () => {
-      $('crop-top').value = btn.dataset.top;
-      $('crop-bottom').value = btn.dataset.bottom;
-      $('crop-left').value = btn.dataset.left;
-      $('crop-right').value = btn.dataset.right;
+      if (!cropState.active) return;
+      setCropFromPreset(
+        parseFloat(btn.dataset.top),
+        parseFloat(btn.dataset.bottom),
+        parseFloat(btn.dataset.left),
+        parseFloat(btn.dataset.right),
+      );
     });
   });
 
@@ -2296,7 +2766,9 @@ function wireEvents() {
     e.preventDefault();
     DOM.canvasArea.classList.remove('drag-over');
     const files = Array.from(e.dataTransfer.files).filter(f =>
-      f.name.toLowerCase().endsWith('.pdf')
+      f.name.toLowerCase().endsWith('.pdf') ||
+      f.type.startsWith('image/') ||
+      /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i.test(f.name)
     );
     if (!files.length) return;
     if (State.pdfDoc) {
@@ -2328,7 +2800,9 @@ function wireEvents() {
     e.preventDefault();
     clearDropIndicators();
     const files = Array.from(e.dataTransfer.files).filter(f =>
-      f.name.toLowerCase().endsWith('.pdf')
+      f.name.toLowerCase().endsWith('.pdf') ||
+      f.type.startsWith('image/') ||
+      /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i.test(f.name)
     );
     if (!files.length || !State.pdfDoc) return;
 
@@ -2350,6 +2824,224 @@ function wireEvents() {
       handleAddPages(files, insertAfter);
     }
   });
+
+  /* ── Security ribbon ── */
+  $('btn-encrypt').addEventListener('click', () => {
+    $('encrypt-modal-backdrop').classList.remove('hidden');
+  });
+  $('btn-encrypt-execute').addEventListener('click', executeEncrypt);
+
+  $('btn-metadata').addEventListener('click', openMetadataModal);
+  $('btn-meta-save').addEventListener('click', executeMetadataSave);
+  $('btn-meta-remove').addEventListener('click', executeMetadataRemove);
+
+  $('btn-redact-search').addEventListener('click', () => {
+    $('redact-results-list').innerHTML = '';
+    $('redact-results').classList.add('hidden');
+    $('btn-redact-apply').classList.add('hidden');
+    $('redact-search-modal-backdrop').classList.remove('hidden');
+  });
+  $('btn-redact-search-execute').addEventListener('click', executeRedactSearch);
+  $('btn-redact-apply').addEventListener('click', executeRedactApply);
+
+  // Toggle custom pattern row when "Custom Pattern" checkbox changes
+  document.querySelectorAll('.redact-pattern-cb').forEach(cb => {
+    if (cb.value === 'custom') {
+      cb.addEventListener('change', () => {
+        $('redact-custom-row').classList.toggle('hidden', !cb.checked);
+      });
+    }
+  });
+
+  /* ── Tools ribbon ── */
+  $('btn-export-image').addEventListener('click', () => {
+    $('export-image-modal-backdrop').classList.remove('hidden');
+  });
+  $('btn-export-image-execute').addEventListener('click', executeExportImage);
+
+  // Show/hide custom range row based on scope
+  $('export-img-scope')?.addEventListener('change', (e) => {
+    $('export-img-range-row').classList.toggle('hidden', e.target.value !== 'custom');
+  });
+  // Update quality % display
+  $('export-img-quality')?.addEventListener('input', (e) => {
+    const pct = Math.round(parseFloat(e.target.value) * 100);
+    const display = $('export-img-quality-val');
+    if (display) display.textContent = pct + '%';
+  });
+
+  $('btn-create-from-images').addEventListener('click', () => {
+    $('create-from-images-modal-backdrop').classList.remove('hidden');
+    _imagesToPdf = [];
+    $('images-file-list').innerHTML = '<p style="color:var(--text-secondary)">No images added yet.</p>';
+  });
+  $('btn-create-from-images-execute').addEventListener('click', executeCreateFromImages);
+
+  // Images drop zone
+  const imgDropZone = $('images-drop-zone');
+  if (imgDropZone) {
+    imgDropZone.addEventListener('dragover', e => { e.preventDefault(); imgDropZone.classList.add('drag-over'); });
+    imgDropZone.addEventListener('dragleave', () => imgDropZone.classList.remove('drag-over'));
+    imgDropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      imgDropZone.classList.remove('drag-over');
+      const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+      addImagesToList(files);
+    });
+    imgDropZone.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
+      input.addEventListener('change', () => addImagesToList(Array.from(input.files)));
+      input.click();
+    });
+  }
+
+  $('btn-optimize').addEventListener('click', () => {
+    $('optimize-result').textContent = '';
+    $('optimize-modal-backdrop').classList.remove('hidden');
+  });
+  $('btn-optimize-execute').addEventListener('click', executeOptimize);
+  $('optimize-quality')?.addEventListener('input', (e) => {
+    const display = $('optimize-quality-val');
+    if (display) display.textContent = e.target.value + '%';
+  });
+
+  $('btn-compare').addEventListener('click', () => {
+    $('compare-setup').classList.remove('hidden');
+    $('compare-results').classList.add('hidden');
+    $('compare-modal-backdrop').classList.remove('hidden');
+    _compareDocB = null;
+  });
+  $('btn-compare-execute').addEventListener('click', executeCompare);
+  $('btn-compare-report').addEventListener('click', downloadCompareReport);
+  $('btn-compare-prev')?.addEventListener('click', () => navigateCompare(-1));
+  $('btn-compare-next')?.addEventListener('click', () => navigateCompare(1));
+  $('compare-view-mode')?.addEventListener('change', renderCurrentCompare);
+
+  // Compare drop zone
+  const cmpDropZone = $('compare-drop-zone');
+  if (cmpDropZone) {
+    cmpDropZone.addEventListener('dragover', e => { e.preventDefault(); cmpDropZone.classList.add('drag-over'); });
+    cmpDropZone.addEventListener('dragleave', () => cmpDropZone.classList.remove('drag-over'));
+    cmpDropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      cmpDropZone.classList.remove('drag-over');
+      const file = Array.from(e.dataTransfer.files).find(f => f.name.toLowerCase().endsWith('.pdf'));
+      if (file) loadCompareFile(file);
+    });
+    cmpDropZone.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = '.pdf';
+      input.addEventListener('change', () => { if (input.files[0]) loadCompareFile(input.files[0]); });
+      input.click();
+    });
+  }
+
+  $('btn-comment-summary').addEventListener('click', openCommentSummaryModal);
+  $('btn-comment-download').addEventListener('click', downloadCommentSummary);
+  $('btn-flatten-anno-exec').addEventListener('click', executeFlattenAnnotations);
+
+  $('btn-flatten-annotations').addEventListener('click', executeFlattenAnnotations);
+
+  /* ── Forms ribbon ── */
+  $('btn-form-text').addEventListener('click', () => createFormFieldInteractive('text'));
+  $('btn-form-checkbox').addEventListener('click', () => createFormFieldInteractive('checkbox'));
+  $('btn-form-dropdown').addEventListener('click', () => createFormFieldInteractive('dropdown'));
+  $('btn-form-radio').addEventListener('click', () => createFormFieldInteractive('radio'));
+  $('btn-form-signature').addEventListener('click', () => createFormFieldInteractive('signature'));
+  $('btn-form-button').addEventListener('click', () => createFormFieldInteractive('button'));
+
+  $('btn-form-import').addEventListener('click', () => {
+    $('form-import-pane').classList.remove('hidden');
+    $('form-export-pane').classList.add('hidden');
+    $('form-data-modal-backdrop').classList.remove('hidden');
+  });
+  $('btn-form-export').addEventListener('click', () => {
+    $('form-import-pane').classList.add('hidden');
+    $('form-export-pane').classList.remove('hidden');
+    $('form-data-modal-backdrop').classList.remove('hidden');
+  });
+  $('btn-form-data-execute')?.addEventListener('click', () => {
+    // Determine which pane is active
+    const importPane = $('form-import-pane');
+    if (importPane && !importPane.classList.contains('hidden')) {
+      executeFormDataImport();
+    } else {
+      const fmt = $('form-export-format')?.value || 'json';
+      executeFormDataExport(fmt);
+    }
+  });
+
+  $('btn-form-tab-order').addEventListener('click', showTabOrder);
+  $('btn-form-flatten').addEventListener('click', executeFormFlatten);
+
+  /* ── Phase 3 Batch: Exhibit Stamps, Sanitize, Page Labels, Replace Pages ── */
+
+  // Exhibit Stamp
+  $('btn-exhibit-stamp').addEventListener('click', openExhibitModal);
+  $('btn-exhibit-execute').addEventListener('click', executeExhibitPlace);
+  $('exhibit-format')?.addEventListener('change', updateExhibitPreview);
+  $('exhibit-prefix')?.addEventListener('input', updateExhibitPreview);
+
+  // Sanitize Document
+  $('btn-sanitize').addEventListener('click', openSanitizeModal);
+  $('btn-sanitize-execute').addEventListener('click', executeSanitize);
+  $('sanitize-confirm').addEventListener('change', () => {
+    $('btn-sanitize-execute').disabled = !$('sanitize-confirm').checked;
+  });
+
+  // Page Labels
+  $('btn-page-labels').addEventListener('click', openPageLabelsModal);
+  $('btn-add-label-range').addEventListener('click', addLabelRangeRow);
+  $('btn-page-labels-apply').addEventListener('click', executePageLabels);
+
+  // Replace Pages
+  $('btn-replace-pages').addEventListener('click', openReplacePagesModal);
+  $('btn-replace-execute').addEventListener('click', executeReplacePages);
+  $('replace-confirm').addEventListener('change', () => {
+    $('btn-replace-execute').disabled = !$('replace-confirm').checked;
+  });
+
+  // Replace Pages — file picker
+  const replaceDropZone = $('replace-source-drop');
+  if (replaceDropZone) {
+    replaceDropZone.addEventListener('dragover', e => { e.preventDefault(); replaceDropZone.classList.add('drag-over'); });
+    replaceDropZone.addEventListener('dragleave', () => replaceDropZone.classList.remove('drag-over'));
+    replaceDropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      replaceDropZone.classList.remove('drag-over');
+      const file = Array.from(e.dataTransfer.files).find(f => f.name.toLowerCase().endsWith('.pdf'));
+      if (file) loadReplaceSource(file);
+    });
+    replaceDropZone.addEventListener('click', () => {
+      $('replace-file-input').click();
+    });
+    $('replace-file-input').addEventListener('change', () => {
+      const f = $('replace-file-input').files[0];
+      if (f) loadReplaceSource(f);
+    });
+  }
+
+  // Form data drop zone
+  const formDropZone = $('form-import-drop-zone');
+  if (formDropZone) {
+    formDropZone.addEventListener('dragover', e => { e.preventDefault(); formDropZone.classList.add('drag-over'); });
+    formDropZone.addEventListener('dragleave', () => formDropZone.classList.remove('drag-over'));
+    formDropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      formDropZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) { _formDataFile = file; formDropZone.querySelector('p').textContent = file.name; }
+    });
+    formDropZone.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = '.json,.xfdf,.csv';
+      input.addEventListener('change', () => {
+        if (input.files[0]) { _formDataFile = input.files[0]; formDropZone.querySelector('p').textContent = input.files[0].name; }
+      });
+      input.click();
+    });
+  }
 }
 
 /* ═══════════════════ Sidebar Drop Helpers ═══════════════════ */
@@ -2374,6 +3066,767 @@ function clearDropIndicators() {
   DOM.thumbnailList.querySelectorAll('.drop-before, .drop-after').forEach(el => {
     el.classList.remove('drop-before', 'drop-after');
   });
+}
+
+/* ═══════════════════ Phase 3 — Feature Handlers ═══════════════════ */
+
+/* ── Module-level state for Phase 3 features ── */
+let _imagesToPdf = [];       // images queued for Create PDF from Images
+let _compareDocB = null;     // PDF.js doc for Compare (document B)
+let _compareResults = null;  // comparison results object
+let _comparePageIdx = 0;     // current page index in comparison view
+let _redactMatches = [];     // redaction search results
+let _formDataFile = null;    // file for form data import
+
+/* ── Encrypt ── */
+async function executeEncrypt() {
+  if (!State.pdfBytes) return;
+  const userPwd = $('encrypt-user-pw').value.trim();
+  const ownerPwd = $('encrypt-owner-pw').value.trim();
+  if (!userPwd && !ownerPwd) { toast('Enter at least one password', 'error'); return; }
+
+  showLoading();
+  try {
+    const permissions = {
+      printing: $('perm-print').checked,
+      copying: $('perm-copy').checked,
+      modifying: $('perm-modify').checked,
+      annotating: $('perm-annotate').checked,
+      fillingForms: $('perm-fill-forms').checked,
+    };
+    const newBytes = await encryptPDF(State.pdfBytes, { userPassword: userPwd, ownerPassword: ownerPwd, permissions });
+    await reloadAfterEdit(newBytes);
+    $('encrypt-modal-backdrop').classList.add('hidden');
+    toast('PDF encrypted successfully', 'success');
+  } catch (err) {
+    toast('Encryption failed: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/* ── Metadata ── */
+async function openMetadataModal() {
+  if (!State.pdfBytes) return;
+  try {
+    const meta = await getMetadata(State.pdfBytes);
+    $('meta-title').value = meta.title || '';
+    $('meta-author').value = meta.author || '';
+    $('meta-subject').value = meta.subject || '';
+    $('meta-keywords').value = meta.keywords || '';
+    $('meta-creator').value = meta.creator || '';
+    $('meta-producer').value = meta.producer || '';
+    $('meta-creation-date').value = meta.creationDate || '';
+    $('meta-mod-date').value = meta.modificationDate || '';
+    $('metadata-modal-backdrop').classList.remove('hidden');
+  } catch (err) {
+    toast('Failed to read metadata: ' + err.message, 'error');
+  }
+}
+
+async function executeMetadataSave() {
+  if (!State.pdfBytes) return;
+  showLoading();
+  try {
+    const fields = {
+      title: $('meta-title').value,
+      author: $('meta-author').value,
+      subject: $('meta-subject').value,
+      keywords: $('meta-keywords').value,
+    };
+    const newBytes = await setMetadata(State.pdfBytes, fields);
+    await reloadAfterEdit(newBytes);
+    $('metadata-modal-backdrop').classList.add('hidden');
+    toast('Metadata updated', 'success');
+  } catch (err) {
+    toast('Failed to save metadata: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function executeMetadataRemove() {
+  if (!State.pdfBytes) return;
+  if (!confirm('Remove all metadata from this document?')) return;
+  showLoading();
+  try {
+    const newBytes = await removeMetadata(State.pdfBytes);
+    await reloadAfterEdit(newBytes);
+    $('metadata-modal-backdrop').classList.add('hidden');
+    toast('Metadata removed', 'success');
+  } catch (err) {
+    toast('Failed to remove metadata: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/* ── Redaction Search ── */
+async function executeRedactSearch() {
+  if (!State.pdfDoc) return;
+  const patternNames = [];
+  document.querySelectorAll('.redact-pattern-cb:checked').forEach(cb => {
+    if (cb.value) patternNames.push(cb.value);
+  });
+  const customInput = $('redact-custom-input');
+  const customPattern = customInput ? customInput.value.trim() : '';
+  if (patternNames.length === 0 && !customPattern) {
+    toast('Select at least one pattern', 'error');
+    return;
+  }
+  if (customPattern && !patternNames.includes('custom')) patternNames.push('custom');
+
+  showLoading();
+  try {
+    _redactMatches = await searchPatterns(State.pdfDoc, patternNames, customPattern);
+    const container = $('redact-results-list');
+    $('redact-results').classList.remove('hidden');
+    if (_redactMatches.length === 0) {
+      container.innerHTML = '<p>No matches found.</p>';
+      $('btn-redact-apply').classList.add('hidden');
+    } else {
+      container.innerHTML = _redactMatches.map((m, i) =>
+        `<label style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border);">
+          <input type="checkbox" checked data-redact-idx="${i}">
+          <span style="font-size:12px;"><strong>Page ${m.pageNum}</strong> — ${escapeHtml(m.text)} <em>(${m.pattern})</em></span>
+        </label>`
+      ).join('');
+      $('btn-redact-apply').classList.remove('hidden');
+    }
+    toast(`Found ${_redactMatches.length} match(es)`, 'info');
+  } catch (err) {
+    toast('Search failed: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function executeRedactApply() {
+  if (!_redactMatches.length) return;
+  const canvas = getCanvas();
+  if (!canvas) return;
+
+  const checked = document.querySelectorAll('#redact-results-list input[type="checkbox"]:checked');
+  let applied = 0;
+  for (const cb of checked) {
+    const idx = parseInt(cb.dataset.redactIdx);
+    const match = _redactMatches[idx];
+    if (!match) continue;
+    // Create redaction rects via annotations on the matching page
+    for (const rect of match.rects) {
+      // Save current page, switch to target page, add rect, switch back
+      savePageAnnotations(State.currentPage);
+      // We add a Fabric rect for each match rect
+      if (match.pageNum === State.currentPage) {
+        const fabricRect = new window.fabric.Rect({
+          left: rect.x,
+          top: rect.y,
+          width: rect.width,
+          height: rect.height,
+          fill: '#000000',
+          opacity: 1,
+          selectable: true,
+          mudbrickType: 'redact',
+        });
+        canvas.add(fabricRect);
+      }
+      applied++;
+    }
+  }
+  canvas.renderAll();
+  savePageAnnotations(State.currentPage);
+  $('redact-search-modal-backdrop').classList.add('hidden');
+  toast(`Applied ${applied} redaction(s) — export PDF to make permanent`, 'success');
+}
+
+/* ── Export to Image ── */
+async function executeExportImage() {
+  if (!State.pdfDoc) return;
+  const scopeEl = $('export-img-scope');
+  const format = $('export-img-format')?.value || 'png';
+  const dpi = parseInt($('export-img-dpi')?.value) || 150;
+  const quality = parseFloat($('export-img-quality')?.value) || 0.92;
+
+  let pages;
+  const scope = scopeEl?.value || 'current';
+  if (scope === 'current') {
+    pages = [State.currentPage];
+  } else if (scope === 'all') {
+    pages = Array.from({ length: State.totalPages }, (_, i) => i + 1);
+  } else {
+    // Custom range
+    const rangeInput = $('export-img-range');
+    pages = rangeInput ? parsePageRanges(rangeInput.value, State.totalPages) : [State.currentPage];
+  }
+
+  showLoading();
+  try {
+    await exportPagesToImages(State.pdfDoc, pages, {
+      format, dpi, quality, fileName: State.fileName,
+    }, (done, total) => {
+      $('loading-text').textContent = `Exporting page ${done}/${total}...`;
+    });
+    $('export-image-modal-backdrop').classList.add('hidden');
+    toast(`Exported ${pages.length} page(s) as ${format.toUpperCase()}`, 'success');
+  } catch (err) {
+    toast('Export failed: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/* ── Create PDF from Images ── */
+function addImagesToList(files) {
+  _imagesToPdf.push(...files);
+  const list = $('images-file-list');
+  list.innerHTML = _imagesToPdf.map((f, i) =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:12px;">${escapeHtml(f.name)} (${formatFileSize(f.size)})</span>
+      <button onclick="this.parentElement.remove(); window._removeImageFromPdf(${i})" style="background:none;border:none;cursor:pointer;color:var(--danger);">&times;</button>
+    </div>`
+  ).join('');
+}
+window._removeImageFromPdf = (idx) => { _imagesToPdf.splice(idx, 1); };
+
+async function executeCreateFromImages() {
+  if (_imagesToPdf.length === 0) { toast('Add at least one image', 'error'); return; }
+  const pageSize = $('images-page-size')?.value || 'fit';
+  const margin = parseInt($('images-margin')?.value) || 0;
+
+  showLoading();
+  try {
+    const pdfBytes = await createPDFFromImages(_imagesToPdf, { pageSize, margin }, (done, total) => {
+      $('loading-text').textContent = `Processing image ${done}/${total}...`;
+    });
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    downloadBlob(blob, 'images_combined.pdf');
+    $('create-from-images-modal-backdrop').classList.add('hidden');
+    toast('PDF created from images', 'success');
+  } catch (err) {
+    toast('Failed to create PDF: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/* ── Optimize PDF ── */
+async function executeOptimize() {
+  if (!State.pdfDoc || !State.pdfBytes) return;
+  const dpi = parseInt($('optimize-dpi')?.value) || 150;
+  const quality = parseFloat($('optimize-quality')?.value) || 0.75;
+
+  showLoading();
+  try {
+    const originalSize = State.pdfBytes.length;
+    const newBytes = await optimizePDF(State.pdfDoc, State.pdfBytes, { dpi, quality }, (done, total) => {
+      $('loading-text').textContent = `Optimizing page ${done}/${total}...`;
+    });
+    const saved = originalSize - newBytes.length;
+    const pct = ((saved / originalSize) * 100).toFixed(1);
+    $('optimize-result').textContent = `Original: ${formatFileSize(originalSize)} → Optimized: ${formatFileSize(newBytes.length)} (${pct}% smaller)`;
+
+    await reloadAfterEdit(newBytes);
+    toast(`Optimized — saved ${formatFileSize(saved)} (${pct}%)`, 'success');
+  } catch (err) {
+    toast('Optimization failed: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/* ── Document Compare ── */
+async function loadCompareFile(file) {
+  try {
+    const buf = await readFileAsArrayBuffer(file);
+    const bytes = new Uint8Array(buf);
+    const pdfjsLib = window.pdfjsLib;
+    _compareDocB = await pdfjsLib.getDocument({ data: bytes }).promise;
+    const dropZone = $('compare-drop-zone');
+    if (dropZone) dropZone.querySelector('p').textContent = `${file.name} (${_compareDocB.numPages} pages)`;
+    const execBtn = $('btn-compare-execute');
+    if (execBtn) execBtn.disabled = false;
+    toast(`Loaded ${file.name} for comparison`, 'info');
+  } catch (err) {
+    toast('Failed to load comparison file: ' + err.message, 'error');
+  }
+}
+
+async function executeCompare() {
+  if (!State.pdfDoc || !_compareDocB) { toast('Load a second PDF to compare', 'error'); return; }
+  const dpi = parseInt($('compare-dpi')?.value) || 96;
+  const threshold = parseInt($('compare-threshold')?.value) || 30;
+
+  showLoading();
+  try {
+    _compareResults = await compareDocuments(State.pdfDoc, _compareDocB, { dpi, threshold }, (page, total) => {
+      $('loading-text').textContent = `Comparing page ${page}/${total}...`;
+      const bar = $('compare-progress-bar');
+      if (bar) bar.style.width = Math.round(page / total * 100) + '%';
+    });
+    _comparePageIdx = 0;
+    $('compare-setup').classList.add('hidden');
+    $('compare-results').classList.remove('hidden');
+    $('compare-report').textContent = generateCompareReport(_compareResults);
+    renderCurrentCompare();
+    toast(`Comparison complete — ${_compareResults.overallDiffPercentage.toFixed(1)}% different`, 'info');
+  } catch (err) {
+    toast('Comparison failed: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function renderCurrentCompare() {
+  if (!_compareResults || !_compareResults.pages.length) return;
+  const page = _compareResults.pages[_comparePageIdx];
+  const view = $('compare-view-mode')?.value || 'side-by-side';
+  const container = $('compare-view');
+  if (container) renderComparisonView(container, page, { view });
+  $('compare-page-info').textContent = `Page ${page.pageNum} of ${_compareResults.maxPages} (${page.diffPercentage.toFixed(2)}% diff)`;
+}
+
+function navigateCompare(dir) {
+  if (!_compareResults) return;
+  _comparePageIdx = Math.max(0, Math.min(_compareResults.pages.length - 1, _comparePageIdx + dir));
+  renderCurrentCompare();
+}
+
+function downloadCompareReport() {
+  if (!_compareResults) return;
+  const text = generateCompareReport(_compareResults);
+  const blob = new Blob([text], { type: 'text/plain' });
+  downloadBlob(blob, 'comparison_report.txt');
+}
+
+/* ── Comment Summary & Flatten Annotations ── */
+function openCommentSummaryModal() {
+  if (!State.pdfDoc) return;
+  const stats = getAnnotationStats(State.currentPage);
+  $('comment-stat-total').textContent = stats.total;
+  $('comment-stat-pages').textContent = stats.pages;
+  $('comment-stat-types').textContent = Object.keys(stats.byType).length;
+
+  // Preview
+  const text = exportCommentsText(State.currentPage);
+  $('comment-summary-preview').textContent = text;
+  $('comment-summary-modal-backdrop').classList.remove('hidden');
+}
+
+function downloadCommentSummary() {
+  const format = $('comment-export-format')?.value || 'text';
+  let content, mime, ext;
+  if (format === 'json') {
+    content = exportCommentsJSON(State.currentPage);
+    mime = 'application/json'; ext = 'json';
+  } else if (format === 'csv') {
+    content = exportCommentsCSV(State.currentPage);
+    mime = 'text/csv'; ext = 'csv';
+  } else {
+    content = exportCommentsText(State.currentPage);
+    mime = 'text/plain'; ext = 'txt';
+  }
+  const blob = new Blob([content], { type: mime });
+  const baseName = (State.fileName || 'document').replace(/\.pdf$/i, '');
+  downloadBlob(blob, `${baseName}_annotations.${ext}`);
+  toast('Annotation summary downloaded', 'success');
+}
+
+async function executeFlattenAnnotations() {
+  if (!State.pdfBytes) return;
+  if (!confirm('Flatten all annotations into the PDF permanently? This cannot be undone.')) return;
+  showLoading();
+  try {
+    const result = await flattenAnnotations({
+      pdfBytes: State.pdfBytes,
+      currentPage: State.currentPage,
+      totalPages: State.totalPages,
+      fileName: State.fileName,
+    });
+    // Clear annotation data
+    State.pageAnnotations = {};
+    await reloadAfterEdit(result.bytes);
+    $('comment-summary-modal-backdrop').classList.add('hidden');
+    toast('Annotations flattened into PDF', 'success');
+  } catch (err) {
+    toast('Flatten failed: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/* ── Form Creator ── */
+async function createFormFieldInteractive(fieldType) {
+  if (!State.pdfLibDoc) { toast('Open a PDF first', 'error'); return; }
+  const pageIndex = State.currentPage - 1;
+  const name = `${fieldType}_${Date.now()}`;
+
+  // Place in center of visible area
+  const page = State.pdfLibDoc.getPage(pageIndex);
+  const { width: pw, height: ph } = page.getSize();
+
+  try {
+    addFormField(State.pdfLibDoc, {
+      type: fieldType, name, pageIndex,
+      x: pw / 2 - 50, y: ph / 2 - 12,
+    });
+    const newBytes = await State.pdfLibDoc.save();
+    await reloadAfterEdit(newBytes);
+    toast(`Added ${fieldType} field "${name}"`, 'success');
+  } catch (err) {
+    toast('Failed to add field: ' + err.message, 'error');
+  }
+}
+
+async function showTabOrder() {
+  if (!State.pdfLibDoc) return;
+  const order = getTabOrder(State.pdfLibDoc, State.currentPage - 1);
+  if (order.length === 0) { toast('No form fields on this page', 'info'); return; }
+  toast(`Tab order (${order.length} fields): ${order.join(' → ')}`, 'info');
+}
+
+async function executeFormFlatten() {
+  if (!State.pdfLibDoc) return;
+  if (!confirm('Flatten all form fields? They will become non-editable.')) return;
+  showLoading();
+  try {
+    const newBytes = await flattenFormFields(State.pdfLibDoc);
+    await reloadAfterEdit(newBytes);
+    toast('Form fields flattened', 'success');
+  } catch (err) {
+    toast('Flatten failed: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/* ── Form Data Import/Export ── */
+async function executeFormDataImport() {
+  if (!State.pdfLibDoc || !_formDataFile) { toast('Select a file to import', 'error'); return; }
+  showLoading();
+  try {
+    const text = await _formDataFile.text();
+    const ext = _formDataFile.name.split('.').pop().toLowerCase();
+    let filled = 0;
+    if (ext === 'json') {
+      filled = importFormDataJSON(State.pdfLibDoc, JSON.parse(text));
+    } else if (ext === 'xfdf' || ext === 'xml') {
+      filled = importFormDataXFDF(State.pdfLibDoc, text);
+    } else if (ext === 'csv') {
+      filled = importFormDataCSV(State.pdfLibDoc, text);
+    }
+    const newBytes = await State.pdfLibDoc.save();
+    await reloadAfterEdit(newBytes);
+    $('form-data-modal-backdrop').classList.add('hidden');
+    toast(`Imported ${filled} field value(s)`, 'success');
+  } catch (err) {
+    toast('Import failed: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function executeFormDataExport(format) {
+  if (!State.pdfLibDoc) return;
+  let content, mime, ext;
+  if (format === 'json') {
+    content = JSON.stringify(exportFormDataJSON(State.pdfLibDoc), null, 2);
+    mime = 'application/json'; ext = 'json';
+  } else if (format === 'xfdf') {
+    content = exportFormDataXFDF(State.pdfLibDoc, State.fileName);
+    mime = 'application/xml'; ext = 'xfdf';
+  } else {
+    content = exportFormDataCSV(State.pdfLibDoc);
+    mime = 'text/csv'; ext = 'csv';
+  }
+  const blob = new Blob([content], { type: mime });
+  const baseName = (State.fileName || 'document').replace(/\.pdf$/i, '');
+  downloadBlob(blob, `${baseName}_formdata.${ext}`);
+  toast('Form data exported', 'success');
+}
+
+/* ── Helpers ── */
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/* ═══════════════════ Phase 3 Batch — Feature Handlers ═══════════════════ */
+
+/* ── Exhibit Stamps ── */
+let _exhibitPlaceMode = false;
+
+function openExhibitModal() {
+  if (!State.pdfDoc) return;
+  updateExhibitPreview();
+  $('exhibit-modal-backdrop').classList.remove('hidden');
+}
+
+function updateExhibitPreview() {
+  const format = $('exhibit-format').value;
+  const prefix = $('exhibit-prefix').value;
+  const existing = countExistingExhibits(getAnnotations() || {});
+  const nextNum = existing + 1;
+  const fmt = EXHIBIT_FORMATS[format] || EXHIBIT_FORMATS.letter;
+  $('exhibit-preview').textContent = 'EXHIBIT ' + prefix + fmt.fn(nextNum);
+}
+
+function executeExhibitPlace() {
+  const format = $('exhibit-format').value;
+  const prefix = $('exhibit-prefix').value;
+  const includeDate = $('exhibit-include-date').checked;
+  setExhibitOptions(format, prefix, includeDate);
+  $('exhibit-modal-backdrop').classList.add('hidden');
+
+  // Enter click-to-place mode
+  _exhibitPlaceMode = true;
+  toast('Click on the page to place exhibit stamp', 'info');
+  DOM.canvasArea.style.cursor = 'crosshair';
+
+  // One-time click handler on the canvas area
+  const onPlace = (e) => {
+    if (!_exhibitPlaceMode) return;
+    _exhibitPlaceMode = false;
+    DOM.canvasArea.style.cursor = '';
+
+    const canvas = getCanvas();
+    if (!canvas) return;
+
+    // Calculate position relative to the Fabric canvas
+    const canvasEl = canvas.getElement();
+    const rect = canvasEl.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const stamp = addExhibitStamp(canvas, x, y, State.zoom);
+    if (stamp) {
+      savePageAnnotations(State.currentPage);
+      toast(`Exhibit stamp placed`, 'success');
+    }
+  };
+
+  // Listen for next click on the canvas overlay (Fabric canvas)
+  setTimeout(() => {
+    const canvasEl = getCanvas()?.getElement();
+    if (canvasEl) {
+      canvasEl.addEventListener('click', onPlace, { once: true });
+    }
+  }, 100);
+}
+
+/* ── Document Sanitization ── */
+function openSanitizeModal() {
+  if (!State.pdfDoc) return;
+  $('sanitize-confirm').checked = false;
+  $('btn-sanitize-execute').disabled = true;
+  $('sanitize-modal-backdrop').classList.remove('hidden');
+}
+
+async function executeSanitize() {
+  if (!State.pdfBytes) return;
+  showLoading();
+  try {
+    const result = await sanitizeDocument(State.pdfBytes);
+    await reloadAfterEdit(result.bytes);
+    $('sanitize-modal-backdrop').classList.add('hidden');
+
+    const rpt = result.report || {};
+    const msg = rpt.metadataRemoved
+      ? 'Document sanitized — metadata stripped'
+      : 'Document sanitized (no metadata found)';
+    toast(msg, 'success');
+  } catch (err) {
+    toast('Sanitization failed: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/* ── Page Labels ── */
+let _labelRangeRows = 0;
+let _savedLabelRanges = []; // snapshot for cancel restore
+
+function openPageLabelsModal() {
+  if (!State.pdfDoc) return;
+
+  // Snapshot current ranges so we can restore on cancel
+  _savedLabelRanges = getLabelRanges();
+
+  // Populate with existing ranges or one empty row
+  const existing = getLabelRanges();
+  const list = $('page-labels-list');
+  list.innerHTML = '';
+  _labelRangeRows = 0;
+
+  if (existing.length > 0) {
+    existing.forEach(r => addLabelRangeRow(null, r));
+  } else {
+    addLabelRangeRow();
+  }
+
+  updateLabelsPreview();
+  $('page-labels-modal-backdrop').classList.remove('hidden');
+}
+
+function addLabelRangeRow(evt, prefill) {
+  const list = $('page-labels-list');
+  const idx = _labelRangeRows++;
+
+  const startVal = prefill ? prefill.startPage : 1;
+  const endVal = prefill ? prefill.endPage : State.totalPages;
+  const fmtVal = prefill ? prefill.format : 'decimal';
+  const prefixVal = prefill ? prefill.prefix : '';
+  const startNumVal = prefill ? prefill.startNum : 1;
+
+  const fmtOptions = LABEL_FORMATS.map(f =>
+    `<option value="${f}" ${f === fmtVal ? 'selected' : ''}>${f}</option>`
+  ).join('');
+
+  const row = document.createElement('div');
+  row.className = 'label-range-row';
+  row.dataset.rangeIdx = idx;
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;padding:6px 8px;background:var(--mb-surface-secondary);border-radius:var(--mb-radius-sm);font-size:12px;';
+  row.innerHTML = `
+    <label style="min-width:40px;">Pages</label>
+    <input type="number" class="label-start" value="${startVal}" min="1" max="${State.totalPages}" style="width:52px;padding:4px;">
+    <span>–</span>
+    <input type="number" class="label-end" value="${endVal}" min="1" max="${State.totalPages}" style="width:52px;padding:4px;">
+    <select class="label-format" style="padding:4px;">${fmtOptions}</select>
+    <input type="text" class="label-prefix" value="${escapeHtml(prefixVal)}" placeholder="Prefix" style="width:52px;padding:4px;">
+    <label style="font-size:11px;">Start#</label>
+    <input type="number" class="label-startnum" value="${startNumVal}" min="1" style="width:44px;padding:4px;">
+    <button class="btn-remove-range" title="Remove" style="background:none;border:none;color:var(--mb-text-muted);cursor:pointer;font-size:16px;padding:2px 4px;">&times;</button>
+  `;
+
+  row.querySelector('.btn-remove-range').addEventListener('click', () => {
+    row.remove();
+    updateLabelsPreview();
+  });
+
+  row.querySelectorAll('input, select').forEach(el => {
+    el.addEventListener('input', updateLabelsPreview);
+    el.addEventListener('change', updateLabelsPreview);
+  });
+
+  list.appendChild(row);
+  updateLabelsPreview();
+}
+
+function updateLabelsPreview() {
+  // Temporarily apply ranges from the modal to generate preview
+  clearLabels();
+  const rows = $('page-labels-list').querySelectorAll('.label-range-row');
+  rows.forEach(row => {
+    const start = parseInt(row.querySelector('.label-start').value) || 1;
+    const end = parseInt(row.querySelector('.label-end').value) || State.totalPages;
+    const format = row.querySelector('.label-format').value;
+    const prefix = row.querySelector('.label-prefix').value;
+    const startNum = parseInt(row.querySelector('.label-startnum').value) || 1;
+    setLabelRange(start, end, format, prefix, startNum);
+  });
+
+  const preview = previewLabels(Math.min(State.totalPages, 20));
+  const container = $('page-labels-preview');
+  container.innerHTML = preview.map(p =>
+    `<span style="display:inline-block;padding:2px 6px;margin:2px;background:var(--mb-surface);border:1px solid var(--mb-border);border-radius:3px;font-size:12px;">
+      <strong>${p.page}</strong>→${escapeHtml(p.label)}
+    </span>`
+  ).join('');
+
+  if (State.totalPages > 20) {
+    container.innerHTML += `<span style="font-size:12px;color:var(--mb-text-muted);margin-left:4px">...and ${State.totalPages - 20} more</span>`;
+  }
+}
+
+function executePageLabels() {
+  // Ranges are already applied from live preview — just persist and refresh
+  generateThumbnails();
+  updatePageNav();
+  $('page-labels-modal-backdrop').classList.add('hidden');
+  toast('Page labels updated', 'success');
+}
+
+/* ── Replace Pages ── */
+let _replaceSourceBytes = null;
+let _replaceSourcePageCount = 0;
+
+function openReplacePagesModal() {
+  if (!State.pdfDoc) return;
+  _replaceSourceBytes = null;
+  _replaceSourcePageCount = 0;
+  $('replace-source-name').textContent = '';
+  $('replace-source-pages').textContent = '';
+  $('replace-mapping').classList.add('hidden');
+  $('replace-mappings-list').innerHTML = '';
+  $('replace-confirm').checked = false;
+  $('btn-replace-execute').disabled = true;
+  $('replace-pages-modal-backdrop').classList.remove('hidden');
+}
+
+async function loadReplaceSource(file) {
+  try {
+    const bytes = new Uint8Array(await readFileAsArrayBuffer(file));
+    // Validate it's a valid PDF by loading with pdf-lib
+    const { PDFDocument } = window.PDFLib;
+    const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+    _replaceSourceBytes = bytes;
+    _replaceSourcePageCount = doc.getPageCount();
+    $('replace-source-name').textContent = file.name;
+    $('replace-source-pages').textContent = _replaceSourcePageCount;
+    $('replace-mapping').classList.remove('hidden');
+    buildReplaceMappingTable();
+  } catch (err) {
+    toast('Invalid PDF: ' + err.message, 'error');
+  }
+}
+
+function buildReplaceMappingTable() {
+  const tbody = $('replace-mappings-list');
+  tbody.innerHTML = '';
+
+  const sourceOpts = ['<option value="">— skip —</option>'];
+  for (let s = 1; s <= _replaceSourcePageCount; s++) {
+    sourceOpts.push(`<option value="${s}">Source page ${s}</option>`);
+  }
+  const optsHtml = sourceOpts.join('');
+
+  for (let p = 1; p <= State.totalPages; p++) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>Page ${p}</td>
+      <td><select class="replace-source-page" data-target="${p}">${optsHtml}</select></td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+async function executeReplacePages() {
+  if (!State.pdfBytes || !_replaceSourceBytes) return;
+
+  // Collect mappings
+  const selects = $('replace-mappings-list').querySelectorAll('.replace-source-page');
+  const mappings = [];
+  selects.forEach(sel => {
+    const sourcePage = parseInt(sel.value);
+    if (sourcePage) {
+      mappings.push({ targetPage: parseInt(sel.dataset.target), sourcePage });
+    }
+  });
+
+  if (mappings.length === 0) {
+    toast('No page replacements selected', 'warning');
+    return;
+  }
+
+  showLoading();
+  try {
+    const newBytes = await replacePages(State.pdfBytes, _replaceSourceBytes, mappings);
+    await reloadAfterEdit(newBytes);
+    $('replace-pages-modal-backdrop').classList.add('hidden');
+    toast(`Replaced ${mappings.length} page${mappings.length !== 1 ? 's' : ''}`, 'success');
+  } catch (err) {
+    toast('Replace failed: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
 }
 
 /* ═══════════════════ Keyboard Shortcuts ═══════════════════ */
@@ -2402,11 +3855,11 @@ function handleKeyboard(e) {
     // Undo / Redo
     case mod && e.key === 'z' && !e.shiftKey:
       e.preventDefault();
-      undoAnnotation();
+      handleUndo();
       break;
     case mod && (e.key === 'y' || (e.key === 'z' && e.shiftKey)):
       e.preventDefault();
-      redoAnnotation();
+      handleRedo();
       break;
 
     // Copy / Paste / Duplicate annotations

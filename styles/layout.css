@@ -929,6 +929,238 @@ html, body {
   background: rgba(0, 100, 255, 0.3);
 }
 
+/* ── Text Edit Mode ── */
+
+.text-edit-line {
+  position: absolute;
+  outline: 2px solid var(--accent, #4a90d9);
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0 2px;
+  cursor: text;
+  z-index: 15;
+  white-space: pre;
+  min-width: 20px;
+  box-sizing: border-box;
+  font-family: sans-serif;
+  color: #000;
+  transition: outline-color 0.15s, background 0.15s;
+}
+.text-edit-line:hover {
+  outline-color: #3b82f6;
+  background: rgba(255, 255, 255, 0.97);
+}
+.text-edit-line:focus {
+  outline-color: #2563eb;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
+}
+
+/* ── Text/Image Edit Toolbar ── */
+
+.text-edit-toolbar {
+  position: fixed;
+  top: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 8px;
+  padding: 6px 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  max-width: 90vw;
+}
+
+.text-edit-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.text-edit-toolbar-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border, #d1d5db);
+  flex-shrink: 0;
+}
+
+.text-edit-toolbar-spacer {
+  flex: 1;
+  min-width: 12px;
+}
+
+.text-edit-toolbar .text-edit-info {
+  font-size: 12px;
+  color: var(--text-muted, #6b7280);
+  white-space: nowrap;
+}
+
+.text-edit-toolbar select {
+  padding: 3px 4px;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 4px;
+  font-size: 12px;
+  background: #fff;
+  cursor: pointer;
+  min-width: 60px;
+}
+
+.text-edit-toolbar input[type="color"] {
+  width: 28px;
+  height: 24px;
+  padding: 1px;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+}
+
+.text-edit-btn {
+  width: 28px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  background: #fff;
+  transition: background 0.15s, border-color 0.15s;
+}
+.text-edit-btn:hover {
+  background: #f3f4f6;
+}
+.text-edit-btn.active {
+  background: #dbeafe;
+  border-color: #2563eb;
+  color: #1e40af;
+}
+
+.text-edit-actions {
+  gap: 6px;
+}
+
+.text-edit-toolbar .text-edit-commit {
+  padding: 5px 14px;
+  border: 1px solid #2563eb;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  background: #2563eb;
+  color: #fff;
+  transition: background 0.15s;
+}
+.text-edit-toolbar .text-edit-commit:hover {
+  background: #1d4ed8;
+}
+.text-edit-toolbar .text-edit-cancel {
+  padding: 5px 14px;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  background: #f9fafb;
+  color: var(--text, #374151);
+  transition: background 0.15s;
+}
+.text-edit-toolbar .text-edit-cancel:hover {
+  background: #e5e7eb;
+}
+
+/* ── Image Edit Mode ── */
+
+.image-edit-overlay {
+  position: absolute;
+  border: 2px dashed #3b82f6;
+  background: rgba(59, 130, 246, 0.06);
+  z-index: 15;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  box-sizing: border-box;
+}
+.image-edit-overlay:hover {
+  border-color: #2563eb;
+  background: rgba(59, 130, 246, 0.12);
+}
+.image-edit-overlay.image-edit-deleted {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  position: relative;
+}
+.image-edit-overlay.image-edit-deleted::after {
+  content: 'DELETED';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #ef4444;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 1px;
+  pointer-events: none;
+}
+.image-edit-overlay.image-edit-replaced {
+  border-color: #10b981;
+  background-size: cover;
+  background-position: center;
+}
+.image-edit-overlay.image-edit-replaced::after {
+  content: 'REPLACED';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  color: #fff;
+  background: rgba(16, 185, 129, 0.85);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.image-edit-actions {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.image-edit-overlay:hover .image-edit-actions {
+  opacity: 1;
+}
+
+.image-edit-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.image-edit-replace {
+  background: rgba(59, 130, 246, 0.9);
+  color: #fff;
+}
+.image-edit-replace:hover {
+  background: #2563eb;
+}
+.image-edit-delete {
+  background: rgba(239, 68, 68, 0.9);
+  color: #fff;
+}
+.image-edit-delete:hover {
+  background: #dc2626;
+}
+
 #fabric-canvas-wrapper {
   position: absolute;
   top: 0;
@@ -953,6 +1185,14 @@ html, body {
   align-items: center;
   gap: 2px;
   z-index: 10;
+  cursor: grab;
+  user-select: none;
+}
+.floating-toolbar.is-dragging {
+  cursor: grabbing;
+  opacity: 0.92;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  transform: none;
 }
 
 .float-btn {
@@ -1494,4 +1734,82 @@ html, body {
   outline: 3px dashed var(--mb-brand);
   outline-offset: -3px;
   background: var(--mb-brand-tint-subtle);
+}
+
+/* ═══════════════════ Visual Crop Overlay ═══════════════════ */
+
+.crop-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 50;
+  pointer-events: auto;
+}
+
+.crop-shade {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.crop-shade-top    { top: 0; left: 0; right: 0; }
+.crop-shade-bottom { bottom: 0; left: 0; right: 0; }
+.crop-shade-left   { left: 0; }
+.crop-shade-right  { right: 0; }
+
+.crop-selection {
+  position: absolute;
+  border: 2px dashed var(--mb-brand);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.5);
+  cursor: move;
+}
+
+.crop-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border: 2px solid var(--mb-brand);
+  border-radius: 2px;
+  z-index: 2;
+}
+.crop-handle[data-handle="nw"] { top: -6px; left: -6px; cursor: nw-resize; }
+.crop-handle[data-handle="n"]  { top: -6px; left: 50%; margin-left: -6px; cursor: n-resize; }
+.crop-handle[data-handle="ne"] { top: -6px; right: -6px; cursor: ne-resize; }
+.crop-handle[data-handle="e"]  { top: 50%; margin-top: -6px; right: -6px; cursor: e-resize; }
+.crop-handle[data-handle="se"] { bottom: -6px; right: -6px; cursor: se-resize; }
+.crop-handle[data-handle="s"]  { bottom: -6px; left: 50%; margin-left: -6px; cursor: s-resize; }
+.crop-handle[data-handle="sw"] { bottom: -6px; left: -6px; cursor: sw-resize; }
+.crop-handle[data-handle="w"]  { top: 50%; margin-top: -6px; left: -6px; cursor: w-resize; }
+
+/* Crop control bar */
+.crop-bar {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--mb-surface);
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-lg);
+  box-shadow: var(--mb-shadow-lg);
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 60;
+  font-size: 13px;
+}
+.crop-bar-info {
+  color: var(--mb-text-secondary);
+  white-space: nowrap;
+}
+.crop-bar-presets {
+  display: flex;
+  gap: 4px;
+}
+.crop-bar-scope {
+  padding: 4px 8px;
+  border: 1px solid var(--mb-border);
+  border-radius: var(--mb-radius-sm);
+  background: var(--mb-surface);
+  font-size: 12px;
+  color: var(--mb-text);
 }

@@ -219,7 +219,7 @@ export function renderOCRTextLayer(pageNum, container, viewport) {
       'white-space:nowrap',
       'overflow:hidden',
       'line-height:1',
-      'pointer-events:none',
+      'pointer-events:auto',
     ].join(';');
 
     container.appendChild(span);

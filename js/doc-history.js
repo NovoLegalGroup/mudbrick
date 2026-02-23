@@ -1,0 +1,92 @@
+/**
+ * Mudbrick — Document-Level Undo / Redo
+ *
+ * Stores pdfBytes snapshots so users can undo/redo document mutations
+ * (insert page, crop, text edit, etc.).
+ *
+ * Separate from annotation history (history.js) which tracks per-page
+ * Fabric.js canvas states.
+ *
+ * Usage:
+ *   import { pushDocState, undoDoc, redoDoc, canUndoDoc, canRedoDoc, clearDocHistory } from './doc-history.js';
+ *   pushDocState(currentBytes);   // before each mutation
+ *   const prev = undoDoc();       // returns Uint8Array or null
+ *   const next = redoDoc();       // returns Uint8Array or null
+ */
+
+const MAX_DOC_HISTORY = 10;
+const MAX_MEMORY_BYTES = 50 * 1024 * 1024; // 50 MB
+
+let undoStack = [];  // Uint8Array[]
+let redoStack = [];  // Uint8Array[]
+
+/** Total bytes currently stored across both stacks. */
+function totalMemory() {
+  let sum = 0;
+  for (const b of undoStack) sum += b.byteLength;
+  for (const b of redoStack) sum += b.byteLength;
+  return sum;
+}
+
+/** Evict oldest undo entries until within memory budget. */
+function evictIfNeeded() {
+  while (undoStack.length > 0 && totalMemory() > MAX_MEMORY_BYTES) {
+    undoStack.shift();
+  }
+}
+
+/**
+ * Save a snapshot of the current document bytes before a mutation.
+ * Clears the redo stack (new edit branch).
+ */
+export function pushDocState(bytes) {
+  if (!bytes) return;
+  undoStack.push(new Uint8Array(bytes)); // defensive copy
+  if (undoStack.length > MAX_DOC_HISTORY) {
+    undoStack.shift();
+  }
+  redoStack.length = 0;
+  evictIfNeeded();
+}
+
+/**
+ * Undo the last document mutation.
+ * @param {Uint8Array} currentBytes — the current pdfBytes to push onto redo
+ * @returns {Uint8Array|null} previous bytes, or null if nothing to undo
+ */
+export function undoDoc(currentBytes) {
+  if (undoStack.length === 0) return null;
+  if (currentBytes) {
+    redoStack.push(new Uint8Array(currentBytes));
+  }
+  return undoStack.pop();
+}
+
+/**
+ * Redo the last undone document mutation.
+ * @param {Uint8Array} currentBytes — the current pdfBytes to push onto undo
+ * @returns {Uint8Array|null} next bytes, or null if nothing to redo
+ */
+export function redoDoc(currentBytes) {
+  if (redoStack.length === 0) return null;
+  if (currentBytes) {
+    undoStack.push(new Uint8Array(currentBytes));
+  }
+  return redoStack.pop();
+}
+
+/** Whether document undo is available. */
+export function canUndoDoc() {
+  return undoStack.length > 0;
+}
+
+/** Whether document redo is available. */
+export function canRedoDoc() {
+  return redoStack.length > 0;
+}
+
+/** Clear all document history (call on new file open). */
+export function clearDocHistory() {
+  undoStack = [];
+  redoStack = [];
+}

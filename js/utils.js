@@ -69,15 +69,17 @@ export function initDragDrop(dropZoneId, onFile) {
     zone.classList.remove('drag-over');
 
     const files = Array.from(e.dataTransfer.files);
-    const pdfFiles = files.filter(f =>
+    const supported = files.filter(f =>
       f.type === 'application/pdf' ||
-      f.name.toLowerCase().endsWith('.pdf')
+      f.name.toLowerCase().endsWith('.pdf') ||
+      f.type.startsWith('image/') ||
+      /\.(png|jpe?g|gif|webp|bmp|tiff?)$/i.test(f.name)
     );
 
-    if (pdfFiles.length > 0) {
-      onFile(pdfFiles);
+    if (supported.length > 0) {
+      onFile(supported);
     } else {
-      toast('Please drop a PDF file.', 'warning');
+      toast('Please drop a PDF or image file.', 'warning');
     }
   });
 

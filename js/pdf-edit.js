@@ -156,6 +156,39 @@ export async function appendPages(basePdfBytes, additions, insertAfter) {
   return baseDoc.save();
 }
 
+/* ═══════════════════ Replace Pages ═══════════════════ */
+
+/**
+ * Replace specific pages in the base document with pages from a source document.
+ * @param {Uint8Array} basePdfBytes - Current document bytes
+ * @param {Uint8Array} sourcePdfBytes - Source PDF bytes to copy pages from
+ * @param {Array<{targetPage: number, sourcePage: number}>} mappings - 1-based page mappings
+ * @returns {Promise<Uint8Array>} New PDF bytes with pages replaced
+ */
+export async function replacePages(basePdfBytes, sourcePdfBytes, mappings) {
+  const { PDFDocument } = getPDFLib();
+  const baseDoc = await PDFDocument.load(basePdfBytes, { ignoreEncryption: true });
+  const sourceDoc = await PDFDocument.load(sourcePdfBytes, { ignoreEncryption: true });
+
+  // Sort descending by target page to avoid index shifts
+  const sorted = [...mappings].sort((a, b) => b.targetPage - a.targetPage);
+
+  for (const { targetPage, sourcePage } of sorted) {
+    const targetIdx = targetPage - 1;
+    const sourceIdx = sourcePage - 1;
+
+    if (targetIdx < 0 || targetIdx >= baseDoc.getPageCount()) continue;
+    if (sourceIdx < 0 || sourceIdx >= sourceDoc.getPageCount()) continue;
+
+    const [copiedPage] = await baseDoc.copyPages(sourceDoc, [sourceIdx]);
+    baseDoc.removePage(targetIdx);
+    baseDoc.insertPage(targetIdx, copiedPage);
+  }
+
+  pdfLibDoc = baseDoc;
+  return baseDoc.save();
+}
+
 /* ═══════════════════ Insert Blank Page ═══════════════════ */
 
 /**

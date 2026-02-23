@@ -34,10 +34,10 @@
 
       <div id="drop-zone">
         <div class="drop-icon" data-icon="file" data-icon-size="48"></div>
-        <div class="drop-text">Drop a PDF here</div>
+        <div class="drop-text">Drop a PDF or image here</div>
         <div class="drop-or">or</div>
         <button class="btn-primary" id="open-file-btn">Open File</button>
-        <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg" hidden>
+        <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tiff" hidden>
       </div>
 
       <div class="welcome-features">
@@ -91,6 +91,8 @@
       <button class="ribbon-tab" data-ribbon="edit">Edit</button>
       <button class="ribbon-tab" data-ribbon="annotate">Annotate</button>
       <button class="ribbon-tab" data-ribbon="forms">Forms</button>
+      <button class="ribbon-tab" data-ribbon="security">Security</button>
+      <button class="ribbon-tab" data-ribbon="tools">Tools</button>
     </div>
 
     <!-- ── Ribbon Panel (contextual toolbar) ── -->
@@ -111,6 +113,21 @@
             </button>
           </div>
           <div class="ribbon-group-label">File</div>
+        </div>
+
+        <!-- Undo/Redo group -->
+        <div class="ribbon-group">
+          <div class="ribbon-row">
+            <button id="btn-undo" class="ribbon-btn" title="Undo (Ctrl+Z)" disabled>
+              <span class="ribbon-icon" data-icon="undo"></span>
+              <span>Undo</span>
+            </button>
+            <button id="btn-redo" class="ribbon-btn" title="Redo (Ctrl+Y)" disabled>
+              <span class="ribbon-icon" data-icon="redo"></span>
+              <span>Redo</span>
+            </button>
+          </div>
+          <div class="ribbon-group-label">History</div>
         </div>
 
         <!-- Organize group -->
@@ -229,12 +246,34 @@
               <span class="ribbon-icon" data-icon="file-plus" data-icon-size="20"></span>
               <span>Insert Page</span>
             </button>
+            <button id="btn-replace-pages" class="ribbon-btn ribbon-btn-lg" title="Replace Pages" disabled>
+              <span class="ribbon-icon" data-icon="replace" data-icon-size="20"></span>
+              <span>Replace</span>
+            </button>
             <button id="btn-crop-page" class="ribbon-btn ribbon-btn-lg" title="Crop Page" disabled>
               <span class="ribbon-icon" data-icon="crop" data-icon-size="20"></span>
               <span>Crop</span>
             </button>
+            <button id="btn-page-labels" class="ribbon-btn ribbon-btn-lg" title="Page Labels" disabled>
+              <span class="ribbon-icon" data-icon="tag" data-icon-size="20"></span>
+              <span>Labels</span>
+            </button>
           </div>
           <div class="ribbon-group-label">Page</div>
+        </div>
+        <!-- Content group -->
+        <div class="ribbon-group">
+          <div class="ribbon-row">
+            <button id="btn-edit-text" class="ribbon-btn" title="Edit existing text on this page" disabled>
+              <span class="ribbon-icon" data-icon="type" data-icon-size="20"></span>
+              <span>Edit Text</span>
+            </button>
+            <button id="btn-edit-image" class="ribbon-btn" title="Edit images on this page" disabled>
+              <span class="ribbon-icon" data-icon="image" data-icon-size="20"></span>
+              <span>Edit Images</span>
+            </button>
+          </div>
+          <div class="ribbon-group-label">Content</div>
         </div>
         <!-- Legal group -->
         <div class="ribbon-group">
@@ -329,6 +368,10 @@
               <span class="ribbon-icon" data-icon="droplet"></span>
               <span>Watermark</span>
             </button>
+            <button id="btn-exhibit-stamp" class="ribbon-btn" title="Exhibit Stamp" disabled>
+              <span class="ribbon-icon" data-icon="gavel"></span>
+              <span>Exhibit</span>
+            </button>
           </div>
           <div class="ribbon-group-label">Insert</div>
         </div>
@@ -338,9 +381,126 @@
       <div class="ribbon-content" id="ribbon-forms">
         <div class="ribbon-group">
           <div class="ribbon-row">
-            <span style="color:var(--mb-text-muted);font-size:12px;padding:8px;">Form tools coming soon</span>
+            <button id="btn-form-text" class="ribbon-btn" title="Add Text Field" disabled>
+              <span class="ribbon-icon" data-icon="form-input"></span>
+              <span>Text Field</span>
+            </button>
+            <button id="btn-form-checkbox" class="ribbon-btn" title="Add Checkbox" disabled>
+              <span class="ribbon-icon" data-icon="check-circle"></span>
+              <span>Checkbox</span>
+            </button>
+            <button id="btn-form-dropdown" class="ribbon-btn" title="Add Dropdown" disabled>
+              <span class="ribbon-icon" data-icon="chevron-down"></span>
+              <span>Dropdown</span>
+            </button>
+            <button id="btn-form-radio" class="ribbon-btn" title="Add Radio Button" disabled>
+              <span class="ribbon-icon" data-icon="zap"></span>
+              <span>Radio</span>
+            </button>
+            <button id="btn-form-signature" class="ribbon-btn" title="Add Signature Field" disabled>
+              <span class="ribbon-icon" data-icon="pen-tool"></span>
+              <span>Signature</span>
+            </button>
+            <button id="btn-form-button" class="ribbon-btn" title="Add Push Button" disabled>
+              <span class="ribbon-icon" data-icon="square"></span>
+              <span>Button</span>
+            </button>
           </div>
-          <div class="ribbon-group-label">Forms</div>
+          <div class="ribbon-group-label">Create Fields</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-row">
+            <button id="btn-form-import" class="ribbon-btn" title="Import Form Data" disabled>
+              <span class="ribbon-icon" data-icon="upload"></span>
+              <span>Import</span>
+            </button>
+            <button id="btn-form-export" class="ribbon-btn" title="Export Form Data" disabled>
+              <span class="ribbon-icon" data-icon="save"></span>
+              <span>Export</span>
+            </button>
+            <button id="btn-form-tab-order" class="ribbon-btn" title="Set Tab Order" disabled>
+              <span class="ribbon-icon" data-icon="list-ordered"></span>
+              <span>Tab Order</span>
+            </button>
+            <button id="btn-form-flatten" class="ribbon-btn" title="Flatten Form Fields" disabled>
+              <span class="ribbon-icon" data-icon="layers"></span>
+              <span>Flatten</span>
+            </button>
+          </div>
+          <div class="ribbon-group-label">Form Data</div>
+        </div>
+      </div>
+
+      <!-- Ribbon: Security (hidden by default) -->
+      <div class="ribbon-content" id="ribbon-security">
+        <div class="ribbon-group">
+          <div class="ribbon-row">
+            <button id="btn-encrypt" class="ribbon-btn ribbon-btn-lg" title="Password Protect PDF" disabled>
+              <span class="ribbon-icon" data-icon="key" data-icon-size="20"></span>
+              <span>Encrypt</span>
+            </button>
+            <button id="btn-metadata" class="ribbon-btn ribbon-btn-lg" title="Edit/Remove Metadata" disabled>
+              <span class="ribbon-icon" data-icon="file-lock" data-icon-size="20"></span>
+              <span>Metadata</span>
+            </button>
+            <button id="btn-sanitize" class="ribbon-btn ribbon-btn-lg" title="Full Document Sanitization" disabled>
+              <span class="ribbon-icon" data-icon="shield-check" data-icon-size="20"></span>
+              <span>Sanitize</span>
+            </button>
+          </div>
+          <div class="ribbon-group-label">Protect</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-row">
+            <button id="btn-redact-search" class="ribbon-btn ribbon-btn-lg" title="Search & Redact Sensitive Data" disabled>
+              <span class="ribbon-icon" data-icon="scan" data-icon-size="20"></span>
+              <span>Redact Search</span>
+            </button>
+          </div>
+          <div class="ribbon-group-label">Redaction</div>
+        </div>
+      </div>
+
+      <!-- Ribbon: Tools (hidden by default) -->
+      <div class="ribbon-content" id="ribbon-tools">
+        <div class="ribbon-group">
+          <div class="ribbon-row">
+            <button id="btn-export-image" class="ribbon-btn ribbon-btn-lg" title="Export Pages to Images" disabled>
+              <span class="ribbon-icon" data-icon="file-image" data-icon-size="20"></span>
+              <span>Export Image</span>
+            </button>
+            <button id="btn-create-from-images" class="ribbon-btn ribbon-btn-lg" title="Create PDF from Images" disabled>
+              <span class="ribbon-icon" data-icon="image" data-icon-size="20"></span>
+              <span>Images → PDF</span>
+            </button>
+            <button id="btn-optimize" class="ribbon-btn ribbon-btn-lg" title="Optimize/Compress PDF" disabled>
+              <span class="ribbon-icon" data-icon="shrink" data-icon-size="20"></span>
+              <span>Optimize</span>
+            </button>
+          </div>
+          <div class="ribbon-group-label">Export</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-row">
+            <button id="btn-compare" class="ribbon-btn ribbon-btn-lg" title="Compare Two PDFs" disabled>
+              <span class="ribbon-icon" data-icon="git-compare" data-icon-size="20"></span>
+              <span>Compare</span>
+            </button>
+          </div>
+          <div class="ribbon-group-label">Compare</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-row">
+            <button id="btn-comment-summary" class="ribbon-btn ribbon-btn-lg" title="Export Annotation Summary" disabled>
+              <span class="ribbon-icon" data-icon="file-text" data-icon-size="20"></span>
+              <span>Comments</span>
+            </button>
+            <button id="btn-flatten-annotations" class="ribbon-btn ribbon-btn-lg" title="Flatten Annotations into PDF" disabled>
+              <span class="ribbon-icon" data-icon="layers" data-icon-size="20"></span>
+              <span>Flatten</span>
+            </button>
+          </div>
+          <div class="ribbon-group-label">Review</div>
         </div>
       </div>
 
@@ -412,6 +572,23 @@
           <div id="text-layer"></div>
           <div id="fabric-canvas-wrapper">
             <canvas id="fabric-canvas"></canvas>
+          </div>
+          <!-- Visual Crop Overlay (inside page-container for positioning) -->
+          <div id="crop-overlay" class="crop-overlay hidden">
+            <div class="crop-shade crop-shade-top"></div>
+            <div class="crop-shade crop-shade-bottom"></div>
+            <div class="crop-shade crop-shade-left"></div>
+            <div class="crop-shade crop-shade-right"></div>
+            <div class="crop-selection">
+              <div class="crop-handle" data-handle="nw"></div>
+              <div class="crop-handle" data-handle="n"></div>
+              <div class="crop-handle" data-handle="ne"></div>
+              <div class="crop-handle" data-handle="e"></div>
+              <div class="crop-handle" data-handle="se"></div>
+              <div class="crop-handle" data-handle="s"></div>
+              <div class="crop-handle" data-handle="sw"></div>
+              <div class="crop-handle" data-handle="w"></div>
+            </div>
           </div>
         </div>
 
@@ -918,71 +1095,27 @@
     </div>
   </div>
 
-  <!-- ═══════ Page Crop Modal ═══════ -->
-  <div id="crop-modal-backdrop" class="modal-backdrop hidden">
-    <div class="modal-panel" style="max-width:440px">
-      <div class="modal-header">
-        <h3>Crop Page</h3>
-        <button class="modal-close" data-close-modal="crop">&times;</button>
-      </div>
-      <div class="modal-body" style="padding:20px 24px">
-
-        <p style="font-size:13px;color:var(--mb-text-secondary);margin:0 0 14px">
-          Enter margins to trim from each edge (in points, 72 pt = 1 inch).
-        </p>
-
-        <!-- Page dimensions info -->
-        <div id="crop-page-info" style="background:var(--mb-surface-sunken);border:1px solid var(--mb-border-light);border-radius:var(--mb-radius-sm);padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--mb-text-secondary)">
-          Page: — × — pt
-        </div>
-
-        <!-- Margin inputs in a cross layout -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-          <div>
-            <label class="bates-label">Top (pt)</label>
-            <input id="crop-top" type="number" class="bates-field" value="0" min="0" step="1">
-          </div>
-          <div>
-            <label class="bates-label">Bottom (pt)</label>
-            <input id="crop-bottom" type="number" class="bates-field" value="0" min="0" step="1">
-          </div>
-          <div>
-            <label class="bates-label">Left (pt)</label>
-            <input id="crop-left" type="number" class="bates-field" value="0" min="0" step="1">
-          </div>
-          <div>
-            <label class="bates-label">Right (pt)</label>
-            <input id="crop-right" type="number" class="bates-field" value="0" min="0" step="1">
-          </div>
-        </div>
-
-        <!-- Preset buttons -->
-        <div style="margin-bottom:16px">
-          <label class="bates-label">Quick Presets</label>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn-secondary btn-sm crop-preset" data-top="36" data-bottom="36" data-left="36" data-right="36">0.5" all sides</button>
-            <button class="btn-secondary btn-sm crop-preset" data-top="72" data-bottom="72" data-left="72" data-right="72">1" all sides</button>
-            <button class="btn-secondary btn-sm crop-preset" data-top="36" data-bottom="36" data-left="0" data-right="0">0.5" top/bottom</button>
-            <button class="btn-secondary btn-sm crop-preset" data-top="0" data-bottom="0" data-left="36" data-right="36">0.5" left/right</button>
-          </div>
-        </div>
-
-        <!-- Apply scope -->
-        <div style="margin-bottom:4px">
-          <label class="bates-label">Apply To</label>
-          <select id="crop-scope" class="bates-field">
-            <option value="current">Current Page</option>
-            <option value="all">All Pages</option>
-          </select>
-        </div>
-
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" data-close-modal="crop">Cancel</button>
-        <button class="btn-primary" id="btn-crop-execute">Crop</button>
-      </div>
+  <!-- ═══════ Crop Control Bar (visual crop overlay is in #page-container) ═══════ -->
+  <div id="crop-bar" class="crop-bar hidden">
+    <span id="crop-bar-info" class="crop-bar-info">Drag handles to adjust crop</span>
+    <div class="crop-bar-presets">
+      <button class="btn-sm btn-secondary crop-preset" data-top="36" data-bottom="36" data-left="36" data-right="36">0.5"</button>
+      <button class="btn-sm btn-secondary crop-preset" data-top="72" data-bottom="72" data-left="72" data-right="72">1"</button>
     </div>
+    <select id="crop-scope" class="crop-bar-scope">
+      <option value="current">Current Page</option>
+      <option value="all">All Pages</option>
+    </select>
+    <button class="btn-primary btn-sm" id="btn-crop-execute">Apply Crop</button>
+    <button class="btn-secondary btn-sm" id="btn-crop-cancel">Cancel</button>
   </div>
+  <!-- Hidden inputs for crop values (used internally) -->
+  <input type="hidden" id="crop-top" value="0">
+  <input type="hidden" id="crop-bottom" value="0">
+  <input type="hidden" id="crop-left" value="0">
+  <input type="hidden" id="crop-right" value="0">
+  <!-- Keep modal backdrop stub for close-modal handler compatibility -->
+  <div id="crop-modal-backdrop" class="hidden"></div>
 
   <!-- ═══════════════════ Signature Modal ═══════════════════ -->
   <div id="signature-modal-backdrop" class="modal-backdrop hidden">
@@ -1105,6 +1238,569 @@
       </div>
     </div>
   </div>
+
+  <!-- ═══════════════════ Encrypt Modal ═══════════════════ -->
+  <div id="encrypt-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:460px;">
+      <div class="modal-header">
+        <h2>Password Protect PDF</h2>
+        <button class="modal-close" data-close-modal="encrypt">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div>
+            <label class="bates-label">User Password (to open)</label>
+            <input type="password" id="encrypt-user-pw" class="bates-field" placeholder="Leave blank for no open password">
+          </div>
+          <div>
+            <label class="bates-label">Owner Password (to edit)</label>
+            <input type="password" id="encrypt-owner-pw" class="bates-field" placeholder="Required">
+          </div>
+          <div>
+            <label class="bates-label">Permissions</label>
+            <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" id="perm-print" checked> Allow Printing
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" id="perm-copy" checked> Allow Copying
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" id="perm-modify" checked> Allow Modifying
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" id="perm-annotate" checked> Allow Annotating
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" id="perm-fill-forms"> Allow Form Filling Only
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="encrypt">Cancel</button>
+        <button class="btn-primary" id="btn-encrypt-execute">Encrypt PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Metadata Modal ═══════════════════ -->
+  <div id="metadata-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:500px;">
+      <div class="modal-header">
+        <h2>Document Metadata</h2>
+        <button class="modal-close" data-close-modal="metadata">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div>
+            <label class="bates-label">Title</label>
+            <input type="text" id="meta-title" class="bates-field" placeholder="Document title">
+          </div>
+          <div>
+            <label class="bates-label">Author</label>
+            <input type="text" id="meta-author" class="bates-field" placeholder="Author name">
+          </div>
+          <div>
+            <label class="bates-label">Subject</label>
+            <input type="text" id="meta-subject" class="bates-field" placeholder="Document subject">
+          </div>
+          <div>
+            <label class="bates-label">Keywords</label>
+            <input type="text" id="meta-keywords" class="bates-field" placeholder="keyword1, keyword2">
+          </div>
+          <div>
+            <label class="bates-label">Creator</label>
+            <input type="text" id="meta-creator" class="bates-field" readonly>
+          </div>
+          <div>
+            <label class="bates-label">Producer</label>
+            <input type="text" id="meta-producer" class="bates-field" readonly>
+          </div>
+          <div>
+            <label class="bates-label">Creation Date</label>
+            <input type="text" id="meta-creation-date" class="bates-field" readonly>
+          </div>
+          <div>
+            <label class="bates-label">Modification Date</label>
+            <input type="text" id="meta-mod-date" class="bates-field" readonly>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-meta-remove" style="color:var(--mb-danger);">Remove All Metadata</button>
+        <button class="btn-secondary" data-close-modal="metadata">Cancel</button>
+        <button class="btn-primary" id="btn-meta-save">Save Metadata</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Redaction Search Modal ═══════════════════ -->
+  <div id="redact-search-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-header">
+        <h2>Search &amp; Redact</h2>
+        <button class="modal-close" data-close-modal="redact-search">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--mb-text-secondary);margin-bottom:16px;">
+          Auto-detect and redact sensitive data. Select patterns to search for:
+        </p>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" class="redact-pattern-cb" value="ssn"> Social Security Numbers (XXX-XX-XXXX)
+          </label>
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" class="redact-pattern-cb" value="creditCard"> Credit Card Numbers
+          </label>
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" class="redact-pattern-cb" value="email"> Email Addresses
+          </label>
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" class="redact-pattern-cb" value="phone"> Phone Numbers
+          </label>
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" class="redact-pattern-cb" value="date"> Dates
+          </label>
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="checkbox" class="redact-pattern-cb" value="custom"> Custom Pattern
+          </label>
+        </div>
+        <div id="redact-custom-row" class="hidden" style="margin-bottom:16px;">
+          <label class="bates-label">Custom Regex or Text</label>
+          <input type="text" id="redact-custom-input" class="bates-field" placeholder="e.g. ACME Corp or \\d{3}-\\d{4}">
+        </div>
+        <div id="redact-results" class="hidden" style="border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);max-height:200px;overflow-y:auto;padding:8px;">
+          <div id="redact-results-list" style="font-size:13px;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="redact-search">Cancel</button>
+        <button class="btn-primary" id="btn-redact-search-execute">Search</button>
+        <button class="btn-primary hidden" id="btn-redact-apply">Apply Redactions</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Export to Image Modal ═══════════════════ -->
+  <div id="export-image-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:420px;">
+      <div class="modal-header">
+        <h2>Export Pages to Image</h2>
+        <button class="modal-close" data-close-modal="export-image">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div>
+            <label class="bates-label">Pages</label>
+            <select id="export-img-scope" class="bates-field">
+              <option value="current">Current Page</option>
+              <option value="all">All Pages</option>
+              <option value="custom">Custom Range</option>
+            </select>
+          </div>
+          <div id="export-img-range-row" class="hidden">
+            <label class="bates-label">Page Range (e.g. 1-5, 8)</label>
+            <input type="text" id="export-img-range" class="bates-field" placeholder="1-5, 8, 10-12">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label class="bates-label">Format</label>
+              <select id="export-img-format" class="bates-field">
+                <option value="png">PNG</option>
+                <option value="jpg">JPEG</option>
+              </select>
+            </div>
+            <div>
+              <label class="bates-label">DPI</label>
+              <select id="export-img-dpi" class="bates-field">
+                <option value="72">72 (Screen)</option>
+                <option value="150" selected>150 (Standard)</option>
+                <option value="300">300 (Print)</option>
+                <option value="600">600 (High Quality)</option>
+              </select>
+            </div>
+          </div>
+          <div id="export-img-quality-row">
+            <label class="bates-label">JPEG Quality</label>
+            <input type="range" id="export-img-quality" min="50" max="100" value="92" style="width:100%;">
+            <span id="export-img-quality-val" style="font-size:12px;color:var(--mb-text-muted);">92%</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="export-image">Cancel</button>
+        <button class="btn-primary" id="btn-export-image-execute">Export</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Create PDF from Images Modal ═══════════════════ -->
+  <div id="create-from-images-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <h2>Create PDF from Images</h2>
+        <button class="modal-close" data-close-modal="create-from-images">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="images-drop-zone" style="border:2px dashed var(--mb-border);border-radius:var(--mb-radius-md);padding:24px;text-align:center;margin-bottom:16px;cursor:pointer;">
+          <p style="color:var(--mb-text-secondary);">Drop image files here or click to add</p>
+          <p style="font-size:11px;color:var(--mb-text-muted);">PNG, JPEG, GIF, WebP</p>
+          <input type="file" id="images-file-input" accept="image/*" multiple hidden>
+        </div>
+        <ul class="file-list" id="images-file-list"></ul>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+          <div>
+            <label class="bates-label">Page Size</label>
+            <select id="images-page-size" class="bates-field">
+              <option value="fit">Fit to Image</option>
+              <option value="letter">Letter (8.5 x 11)</option>
+              <option value="a4">A4</option>
+              <option value="legal">Legal</option>
+            </select>
+          </div>
+          <div>
+            <label class="bates-label">Margin (pt)</label>
+            <input type="number" id="images-margin" class="bates-field" value="0" min="0" max="144">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="create-from-images">Cancel</button>
+        <button class="btn-primary" id="btn-create-from-images-execute" disabled>Create PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Optimize PDF Modal ═══════════════════ -->
+  <div id="optimize-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-header">
+        <h2>Optimize PDF</h2>
+        <button class="modal-close" data-close-modal="optimize">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:13px;color:var(--mb-text-secondary);margin-bottom:16px;">
+          Reduce file size by re-rendering pages as compressed images. Text will be rasterized (lossy).
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <label class="bates-label">DPI</label>
+            <select id="optimize-dpi" class="bates-field">
+              <option value="72">72 (Smallest)</option>
+              <option value="150" selected>150 (Balanced)</option>
+              <option value="300">300 (Quality)</option>
+            </select>
+          </div>
+          <div>
+            <label class="bates-label">JPEG Quality</label>
+            <input type="range" id="optimize-quality" min="30" max="95" value="75" style="width:100%;">
+            <span id="optimize-quality-val" style="font-size:12px;color:var(--mb-text-muted);">75%</span>
+          </div>
+        </div>
+        <div id="optimize-result" class="hidden" style="margin-top:16px;padding:12px;background:var(--mb-surface-sunken);border-radius:var(--mb-radius-sm);font-size:13px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="optimize">Cancel</button>
+        <button class="btn-primary" id="btn-optimize-execute">Optimize</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Document Compare Modal ═══════════════════ -->
+  <div id="compare-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal-panel" style="max-width:90vw;width:900px;">
+      <div class="modal-header">
+        <h2>Compare Documents</h2>
+        <button class="modal-close" data-close-modal="compare">&times;</button>
+      </div>
+      <div class="modal-body" style="padding:16px 20px;">
+        <!-- File selection (shown first) -->
+        <div id="compare-setup">
+          <p style="font-size:13px;color:var(--mb-text-secondary);margin-bottom:16px;">
+            Compare the current document with another PDF to see differences.
+          </p>
+          <div style="border:2px dashed var(--mb-border);border-radius:var(--mb-radius-md);padding:24px;text-align:center;cursor:pointer;" id="compare-drop-zone">
+            <p style="color:var(--mb-text-secondary);">Drop the second PDF here or click to select</p>
+            <input type="file" id="compare-file-input" accept=".pdf" hidden>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+            <div>
+              <label class="bates-label">Comparison DPI</label>
+              <select id="compare-dpi" class="bates-field">
+                <option value="72">72 (Fast)</option>
+                <option value="96" selected>96 (Default)</option>
+                <option value="150">150 (Detailed)</option>
+              </select>
+            </div>
+            <div>
+              <label class="bates-label">Sensitivity</label>
+              <select id="compare-threshold" class="bates-field">
+                <option value="15">High (15)</option>
+                <option value="30" selected>Normal (30)</option>
+                <option value="50">Low (50)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <!-- Results (shown after comparison) -->
+        <div id="compare-results" class="hidden">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div id="compare-summary" style="font-size:13px;color:var(--mb-text-secondary);"></div>
+            <div style="display:flex;gap:6px;">
+              <select id="compare-view-mode" class="bates-field" style="width:auto;">
+                <option value="side-by-side">Side by Side</option>
+                <option value="overlay">Overlay</option>
+                <option value="diff-only">Diff Only</option>
+              </select>
+              <button class="btn-secondary btn-sm" id="btn-compare-prev" disabled>&larr; Prev</button>
+              <span id="compare-page-info" style="font-size:13px;padding:4px 8px;">Page 1</span>
+              <button class="btn-secondary btn-sm" id="btn-compare-next" disabled>Next &rarr;</button>
+            </div>
+          </div>
+          <div id="compare-view" style="min-height:300px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);padding:8px;background:var(--mb-surface-sunken);"></div>
+          <pre id="compare-report" class="hidden" style="margin-top:12px;font-size:12px;max-height:200px;overflow:auto;padding:12px;background:var(--mb-surface-sunken);border-radius:var(--mb-radius-sm);"></pre>
+        </div>
+        <!-- Progress -->
+        <div id="compare-progress" class="hidden" style="margin-top:12px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <span id="compare-progress-label">Comparing…</span>
+            <span id="compare-progress-pct">0%</span>
+          </div>
+          <div style="height:6px;background:var(--mb-surface-alt);border-radius:3px;overflow:hidden;">
+            <div id="compare-progress-bar" style="height:100%;width:0%;background:var(--mb-brand);border-radius:3px;transition:width 200ms;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-compare-report" class="hidden">View Report</button>
+        <button class="btn-secondary" data-close-modal="compare">Close</button>
+        <button class="btn-primary" id="btn-compare-execute" disabled>Compare</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Comment Summary Modal ═══════════════════ -->
+  <div id="comment-summary-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal-header">
+        <h2>Annotation Summary</h2>
+        <button class="modal-close" data-close-modal="comment-summary">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="comment-summary-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
+          <div style="background:var(--mb-surface-sunken);padding:12px;border-radius:var(--mb-radius-sm);text-align:center;">
+            <div id="comment-stat-total" style="font-size:24px;font-weight:700;color:var(--mb-brand);">0</div>
+            <div style="font-size:11px;color:var(--mb-text-muted);">Total Annotations</div>
+          </div>
+          <div style="background:var(--mb-surface-sunken);padding:12px;border-radius:var(--mb-radius-sm);text-align:center;">
+            <div id="comment-stat-pages" style="font-size:24px;font-weight:700;color:var(--mb-brand);">0</div>
+            <div style="font-size:11px;color:var(--mb-text-muted);">Pages With Annotations</div>
+          </div>
+          <div style="background:var(--mb-surface-sunken);padding:12px;border-radius:var(--mb-radius-sm);text-align:center;">
+            <div id="comment-stat-types" style="font-size:24px;font-weight:700;color:var(--mb-brand);">0</div>
+            <div style="font-size:11px;color:var(--mb-text-muted);">Annotation Types</div>
+          </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label class="bates-label">Export Format</label>
+          <select id="comment-export-format" class="bates-field" style="width:auto;">
+            <option value="text">Plain Text</option>
+            <option value="json">JSON</option>
+            <option value="csv">CSV</option>
+          </select>
+        </div>
+        <pre id="comment-summary-preview" style="max-height:250px;overflow:auto;padding:12px;background:var(--mb-surface-sunken);border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);font-size:12px;white-space:pre-wrap;"></pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btn-flatten-anno-exec" style="color:var(--mb-danger);">Flatten All</button>
+        <button class="btn-secondary" data-close-modal="comment-summary">Close</button>
+        <button class="btn-primary" id="btn-comment-download">Download</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Form Data Import/Export Modal ═══════════════════ -->
+  <div id="form-data-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:420px;">
+      <div class="modal-header">
+        <h2 id="form-data-modal-title">Form Data</h2>
+        <button class="modal-close" data-close-modal="form-data">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Import pane -->
+        <div id="form-import-pane" class="hidden">
+          <p style="font-size:13px;color:var(--mb-text-secondary);margin-bottom:12px;">
+            Import form data from a JSON, XFDF, or CSV file.
+          </p>
+          <div style="border:2px dashed var(--mb-border);border-radius:var(--mb-radius-md);padding:24px;text-align:center;cursor:pointer;" id="form-import-drop-zone">
+            <p style="color:var(--mb-text-secondary);">Drop file here or click to select</p>
+            <p style="font-size:11px;color:var(--mb-text-muted);">JSON, XFDF, or CSV</p>
+            <input type="file" id="form-import-file-input" accept=".json,.xfdf,.csv" hidden>
+          </div>
+          <div id="form-import-preview" class="hidden" style="margin-top:12px;padding:12px;background:var(--mb-surface-sunken);border-radius:var(--mb-radius-sm);font-size:12px;max-height:150px;overflow:auto;"></div>
+        </div>
+        <!-- Export pane -->
+        <div id="form-export-pane" class="hidden">
+          <p style="font-size:13px;color:var(--mb-text-secondary);margin-bottom:12px;">
+            Export current form data to a file.
+          </p>
+          <label class="bates-label">Format</label>
+          <select id="form-export-format" class="bates-field">
+            <option value="json">JSON</option>
+            <option value="xfdf">XFDF (Adobe Compatible)</option>
+            <option value="csv">CSV</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="form-data">Cancel</button>
+        <button class="btn-primary" id="btn-form-data-execute">Execute</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Exhibit Stamp Modal ═══════════════════ -->
+  <div id="exhibit-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-header">
+        <h2>Exhibit Stamp</h2>
+        <button class="modal-close" data-close-modal="exhibit">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label class="bates-label">Numbering Format</label>
+        <select id="exhibit-format" class="bates-field">
+          <option value="letter">A, B, C...</option>
+          <option value="number">1, 2, 3...</option>
+          <option value="roman-upper">I, II, III...</option>
+          <option value="roman-lower">i, ii, iii...</option>
+        </select>
+        <label class="bates-label" style="margin-top:12px;">Prefix (optional)</label>
+        <input type="text" id="exhibit-prefix" class="bates-field" placeholder="e.g. Plaintiff's ">
+        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="exhibit-include-date" checked>
+          Include date on stamp
+        </label>
+        <div style="margin-top:16px;padding:16px;background:var(--mb-surface-secondary);border-radius:var(--mb-radius-md);text-align:center;">
+          <p style="margin:0 0 4px;font-size:11px;color:var(--mb-text-muted);">Preview</p>
+          <div id="exhibit-preview" style="font-weight:bold;color:#1565c0;font-size:18px;">EXHIBIT A</div>
+        </div>
+        <p style="margin-top:12px;font-size:12px;color:var(--mb-text-muted);">
+          Click anywhere on the page to place the exhibit stamp. Numbers auto-increment.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="exhibit">Cancel</button>
+        <button class="btn-primary" id="btn-exhibit-execute">Place Stamp</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Sanitize Document Modal ═══════════════════ -->
+  <div id="sanitize-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:440px;">
+      <div class="modal-header">
+        <h2>Sanitize Document</h2>
+        <button class="modal-close" data-close-modal="sanitize">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin:0 0 12px;font-size:13px;color:var(--mb-text-secondary);">
+          Remove all hidden data before filing or sharing. This will strip:
+        </p>
+        <div style="padding:12px;background:var(--mb-surface-secondary);border-radius:var(--mb-radius-md);">
+          <ul style="margin:0 0 0 20px;font-size:13px;color:var(--mb-text);line-height:1.8;">
+            <li>Document title, author, subject, keywords</li>
+            <li>Creator and producer software tags</li>
+            <li>Creation and modification dates</li>
+            <li>Revision history and XMP metadata</li>
+          </ul>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:16px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="sanitize-confirm">
+          I understand this cannot be undone
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="sanitize">Cancel</button>
+        <button class="btn-primary" id="btn-sanitize-execute" disabled>Sanitize Document</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Page Labels Modal ═══════════════════ -->
+  <div id="page-labels-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal-header">
+        <h2>Page Labels</h2>
+        <button class="modal-close" data-close-modal="page-labels">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin:0 0 12px;font-size:13px;color:var(--mb-text-secondary);">
+          Define custom numbering for different document sections (e.g. roman numerals for front matter).
+        </p>
+        <div id="page-labels-list" style="display:flex;flex-direction:column;gap:8px;max-height:250px;overflow-y:auto;">
+          <!-- Rows added dynamically -->
+        </div>
+        <button id="btn-add-label-range" class="btn-secondary" style="margin-top:12px;width:100%;font-size:13px;">+ Add Range</button>
+        <div style="margin-top:12px;padding:12px;background:var(--mb-surface-secondary);border-radius:var(--mb-radius-md);max-height:120px;overflow-y:auto;">
+          <p style="margin:0 0 4px;font-size:11px;color:var(--mb-text-muted);">Preview</p>
+          <div id="page-labels-preview" style="font-size:12px;color:var(--mb-text);display:flex;flex-wrap:wrap;gap:4px;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="page-labels">Cancel</button>
+        <button class="btn-primary" id="btn-page-labels-apply">Apply Labels</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ Replace Pages Modal ═══════════════════ -->
+  <div id="replace-pages-modal-backdrop" class="modal-backdrop hidden">
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-header">
+        <h2>Replace Pages</h2>
+        <button class="modal-close" data-close-modal="replace-pages">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin:0 0 12px;font-size:13px;color:var(--mb-text-secondary);">
+          Replace pages in the current document with pages from another PDF.
+        </p>
+        <div id="replace-source-drop" style="border:2px dashed var(--mb-border);border-radius:var(--mb-radius-md);padding:24px;text-align:center;cursor:pointer;">
+          <p style="color:var(--mb-text-secondary);margin:0;">Click to choose source PDF</p>
+          <p style="font-size:11px;color:var(--mb-text-muted);margin:4px 0 0;">or drag and drop</p>
+          <input type="file" id="replace-file-input" accept=".pdf" hidden>
+        </div>
+        <div id="replace-mapping" class="hidden" style="margin-top:16px;">
+          <p style="font-size:13px;color:var(--mb-text-secondary);margin:0 0 8px;">
+            Source: <strong id="replace-source-name"></strong> (<span id="replace-source-pages"></span> pages)
+          </p>
+          <div style="border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);overflow:auto;max-height:250px;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+              <thead style="background:var(--mb-surface-secondary);position:sticky;top:0;">
+                <tr>
+                  <th style="padding:8px;text-align:left;border-bottom:1px solid var(--mb-border);">Current Page</th>
+                  <th style="padding:8px;text-align:left;border-bottom:1px solid var(--mb-border);">Replace With</th>
+                </tr>
+              </thead>
+              <tbody id="replace-mappings-list"></tbody>
+            </table>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--mb-text-muted);cursor:pointer;">
+            <input type="checkbox" id="replace-confirm">
+            I understand replaced pages cannot be recovered
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close-modal="replace-pages">Cancel</button>
+        <button class="btn-primary" id="btn-replace-execute" disabled>Replace Pages</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden file input for creating PDF from images -->
+  <input type="file" id="create-images-file-input" accept="image/*" multiple hidden>
 
   <!-- ═══════════════════ Service Worker Registration ═══════════════════ -->
   <script>
