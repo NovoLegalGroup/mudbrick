@@ -18,27 +18,10 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* Toolbar buttons */
-#toolbar button {
-  color: var(--mb-toolbar-text);
-  padding: 6px 10px;
-  border-radius: var(--mb-radius-sm);
-  white-space: nowrap;
-  transition: background var(--mb-transition);
-  font-size: 12px;
-}
-
-#toolbar button:hover:not(:disabled) {
-  background: var(--mb-toolbar-hover);
-}
-
-#toolbar button.active {
-  background: var(--mb-toolbar-active);
-  color: #fff;
-}
-
-#toolbar button:disabled {
-  opacity: 0.3;
+/* Ribbon toolbar buttons (overrides for ribbon context) */
+.ribbon-btn.active {
+  background: var(--mb-brand-tint);
+  color: var(--mb-brand);
 }
 
 /* Primary button */
@@ -71,17 +54,7 @@ button:disabled {
   background: var(--mb-surface-hover) !important;
 }
 
-/* Sidebar buttons */
-#sidebar-header button {
-  color: var(--mb-text-secondary);
-  padding: 4px;
-  border-radius: var(--mb-radius-sm);
-  font-size: 12px;
-}
-
-#sidebar-header button:hover {
-  background: var(--mb-surface-hover);
-}
+/* (Sidebar buttons are now styled in layout.css as .sidebar-tab / .sidebar-collapse) */
 
 /* Page nav buttons */
 #page-nav button {
@@ -154,6 +127,12 @@ button:disabled {
   gap: 8px;
   padding: 12px 20px;
   border-top: 1px solid var(--mb-border-light);
+}
+
+/* Signature modal tabs */
+.sig-tab.active {
+  color: var(--mb-accent) !important;
+  border-bottom-color: var(--mb-accent) !important;
 }
 
 @keyframes fadeIn {
@@ -269,24 +248,66 @@ button:disabled {
   z-index: 1050;
 }
 
-.context-menu-item {
-  display: block;
+.context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   text-align: left;
   padding: 8px 16px;
   font-size: 13px;
   color: var(--mb-text);
   cursor: pointer;
+  background: none;
+  border: none;
 }
 
-.context-menu-item:hover {
+.context-menu button:hover:not(:disabled) {
   background: var(--mb-surface-hover);
 }
 
-.context-menu-divider {
+.context-menu button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.context-menu-separator {
   height: 1px;
   background: var(--mb-border-light);
   margin: 4px 0;
+}
+
+/* File list items (merge modal) */
+.file-list-name {
+  flex: 1;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-list-size {
+  font-size: 11px;
+  color: var(--mb-text-muted);
+  flex-shrink: 0;
+}
+
+.file-list-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.file-list-btn {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: var(--mb-radius-sm);
+  color: var(--mb-text-secondary);
+}
+
+.file-list-btn:hover:not(:disabled) {
+  background: var(--mb-surface-hover);
+  color: var(--mb-text);
 }
 
 /* ── Scrollbars ── */
@@ -301,12 +322,20 @@ button:disabled {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0,0,0,0.2);
+  background: var(--mb-scrollbar-thumb);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0,0,0,0.35);
+  background: var(--mb-scrollbar-thumb-hover);
+}
+
+/* ── SVG Icons ── */
+
+.icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 /* ── Tooltips (native title for now) ── */

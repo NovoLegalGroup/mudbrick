@@ -7,3 +7,4 @@ Thumbs.db
 
 # Node modules (if any get installed)
 node_modules/
+.vercel

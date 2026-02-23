@@ -6,6 +6,10 @@
   --mb-brand-light: #e74c3c;
   --mb-brand-dark: #96281b;
 
+  /* Accent (sidebar tabs, links, active tools) */
+  --mb-accent: #2980b9;
+  --mb-accent-light: #d6eaf8;
+
   /* Surface */
   --mb-bg: #f5f5f5;
   --mb-surface: #ffffff;
@@ -43,11 +47,25 @@
   /* Canvas area */
   --mb-canvas-bg: #808080;
 
+  /* Sunken / Inset (readonly inputs, slider tracks) */
+  --mb-surface-sunken: #f0f0f0;
+
+  /* Danger */
+  --mb-danger: #e74c3c;
+
   /* Toasts */
   --mb-toast-success: #27ae60;
   --mb-toast-error: #e74c3c;
   --mb-toast-warning: #f39c12;
   --mb-toast-info: #3498db;
+
+  /* Brand tints (for active states, hover overlays) */
+  --mb-brand-tint: rgba(192, 57, 43, 0.1);
+  --mb-brand-tint-subtle: rgba(192, 57, 43, 0.05);
+
+  /* Scrollbars */
+  --mb-scrollbar-thumb: rgba(0,0,0,0.2);
+  --mb-scrollbar-thumb-hover: rgba(0,0,0,0.35);
 
   /* Shadows */
   --mb-shadow-sm: 0 1px 3px rgba(0,0,0,0.12);
@@ -63,6 +81,7 @@
   --mb-toolbar-height: 48px;
   --mb-statusbar-height: 28px;
   --mb-sidebar-width: 200px;
+  --mb-panel-width: 260px;
   --mb-pagenav-height: 36px;
 
   /* Transitions */
@@ -97,6 +116,12 @@ html[data-theme="dark"] {
   --mb-sidebar-bg: #222222;
   --mb-sidebar-thumb-bg: #333333;
   --mb-sidebar-thumb-border: #444444;
+  --mb-accent-light: #1a3a5c;
+  --mb-surface-sunken: #222222;
   --mb-statusbar-bg: #1a1a1a;
   --mb-canvas-bg: #555555;
+  --mb-brand-tint: rgba(192, 57, 43, 0.25);
+  --mb-brand-tint-subtle: rgba(192, 57, 43, 0.12);
+  --mb-scrollbar-thumb: rgba(255,255,255,0.2);
+  --mb-scrollbar-thumb-hover: rgba(255,255,255,0.35);
 }

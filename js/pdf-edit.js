@@ -125,6 +125,188 @@ export async function splitPDF(pdfBytes, ranges) {
   return results;
 }
 
-/* ═══════════════════ Phase 7: Watermark (stub) ═══════════════════ */
+/* ═══════════════════ Append Pages (Inline Add) ═══════════════════ */
 
-export async function addWatermark(text, options) { /* Phase 7 */ }
+/**
+ * Append pages from one or more PDFs to the current document.
+ * @param {Uint8Array} basePdfBytes - The current document bytes
+ * @param {Array<{bytes: Uint8Array}>} additions - PDFs to append
+ * @param {number} [insertAfter] - 0-based page index to insert after.
+ *   Defaults to end of document. Pass 0 to insert after page 1, etc.
+ * @returns {Promise<Uint8Array>} New PDF bytes with pages appended
+ */
+export async function appendPages(basePdfBytes, additions, insertAfter) {
+  const { PDFDocument } = getPDFLib();
+  const baseDoc = await PDFDocument.load(basePdfBytes, { ignoreEncryption: true });
+  const baseCount = baseDoc.getPageCount();
+  const insertIdx = insertAfter !== undefined ? insertAfter + 1 : baseCount;
+
+  let offset = 0;
+  for (const { bytes } of additions) {
+    const donor = await PDFDocument.load(bytes, { ignoreEncryption: true });
+    const indices = donor.getPageIndices();
+    const pages = await baseDoc.copyPages(donor, indices);
+    for (let i = 0; i < pages.length; i++) {
+      baseDoc.insertPage(insertIdx + offset, pages[i]);
+      offset++;
+    }
+  }
+
+  pdfLibDoc = baseDoc;
+  return baseDoc.save();
+}
+
+/* ═══════════════════ Insert Blank Page ═══════════════════ */
+
+/**
+ * Insert a blank page into the document.
+ * @param {Uint8Array} pdfBytes - Source PDF bytes
+ * @param {number} afterIndex - 0-based index to insert AFTER. -1 = insert at beginning.
+ * @param {number} [width] - Page width in points (default: same as page at afterIndex, or Letter 612)
+ * @param {number} [height] - Page height in points (default: same as page at afterIndex, or Letter 792)
+ * @returns {Promise<Uint8Array>} New PDF bytes
+ */
+export async function insertBlankPage(pdfBytes, afterIndex, width, height) {
+  const doc = await ensurePdfLib(pdfBytes);
+
+  // Default to dimensions of the reference page (or Letter size)
+  if (width == null || height == null) {
+    const refIdx = Math.max(0, Math.min(afterIndex, doc.getPageCount() - 1));
+    const refPage = doc.getPage(refIdx);
+    const refSize = refPage.getSize();
+    width = width ?? refSize.width;
+    height = height ?? refSize.height;
+  }
+
+  const insertAt = afterIndex + 1; // insertPage is 0-based position
+  doc.insertPage(insertAt, [width, height]);
+
+  return doc.save();
+}
+
+/* ═══════════════════ Page Crop ═══════════════════ */
+
+/**
+ * Crop pages by setting the CropBox.
+ * Margins specify how much to trim from each edge (in points, 72 pt = 1 inch).
+ * @param {Uint8Array} pdfBytes
+ * @param {Object} opts
+ * @param {number} opts.top    - Points to trim from top
+ * @param {number} opts.bottom - Points to trim from bottom
+ * @param {number} opts.left   - Points to trim from left
+ * @param {number} opts.right  - Points to trim from right
+ * @param {string} opts.pages  - 'all' | 'current'
+ * @param {number} opts.currentPage - 1-based current page
+ * @returns {Promise<Uint8Array>}
+ */
+export async function cropPages(pdfBytes, opts = {}) {
+  const doc = await ensurePdfLib(pdfBytes);
+  const {
+    top = 0, bottom = 0, left = 0, right = 0,
+    pages = 'all',
+    currentPage = 1,
+  } = opts;
+
+  const pageCount = doc.getPageCount();
+  const startIdx = pages === 'current' ? currentPage - 1 : 0;
+  const endIdx = pages === 'current' ? currentPage : pageCount;
+
+  for (let i = startIdx; i < endIdx; i++) {
+    const page = doc.getPage(i);
+    const { width, height } = page.getSize();
+
+    // Validate margins don't exceed page dimensions
+    const cropW = width - left - right;
+    const cropH = height - top - bottom;
+    if (cropW < 36 || cropH < 36) {
+      throw new Error(`Crop margins too large for page ${i + 1} (${Math.round(width)}×${Math.round(height)} pt). Remaining area would be ${Math.round(cropW)}×${Math.round(cropH)} pt.`);
+    }
+
+    page.setCropBox(left, bottom, cropW, cropH);
+  }
+
+  return doc.save();
+}
+
+/**
+ * Get page dimensions in points (for showing in crop modal).
+ * @param {Uint8Array} pdfBytes
+ * @param {number} pageIndex - 0-based
+ * @returns {Promise<{width: number, height: number}>}
+ */
+export async function getPageDimensions(pdfBytes, pageIndex) {
+  const doc = await ensurePdfLib(pdfBytes);
+  const page = doc.getPage(pageIndex);
+  return page.getSize();
+}
+
+/* ═══════════════════ Phase 7: Watermark ═══════════════════ */
+
+/**
+ * Add a text watermark to PDF pages.
+ * @param {Uint8Array} pdfBytes - Source PDF bytes
+ * @param {Object} opts
+ * @param {string} opts.text - Watermark text
+ * @param {number} opts.fontSize - Font size (default 60)
+ * @param {number} opts.rotation - Rotation degrees (default -45)
+ * @param {number} opts.opacity - Opacity 0-1 (default 0.15)
+ * @param {string} opts.color - Hex color (default '#888888')
+ * @param {string} opts.pages - 'all' or 'current'
+ * @param {number} opts.currentPage - Current page (1-based, for 'current' mode)
+ * @returns {Promise<Uint8Array>} New PDF bytes
+ */
+export async function addWatermark(pdfBytes, opts = {}) {
+  const PDFLib = getPDFLib();
+  const doc = await ensurePdfLib(pdfBytes);
+
+  const {
+    text = 'CONFIDENTIAL',
+    fontSize = 60,
+    rotation = -45,
+    opacity = 0.15,
+    color = '#888888',
+    pages = 'all',
+    currentPage = 1,
+  } = opts;
+
+  // Parse hex color to RGB
+  const r = parseInt(color.slice(1, 3), 16) / 255;
+  const g = parseInt(color.slice(3, 5), 16) / 255;
+  const b = parseInt(color.slice(5, 7), 16) / 255;
+
+  const font = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
+  const radians = (rotation * Math.PI) / 180;
+
+  const pageCount = doc.getPageCount();
+  const startIdx = pages === 'current' ? currentPage - 1 : 0;
+  const endIdx = pages === 'current' ? currentPage : pageCount;
+
+  for (let i = startIdx; i < endIdx; i++) {
+    const page = doc.getPage(i);
+    const { width, height } = page.getSize();
+
+    // Measure text to center it
+    const textWidth = font.widthOfTextAtSize(text, fontSize);
+    const textHeight = fontSize;
+
+    // Center of page
+    const cx = width / 2;
+    const cy = height / 2;
+
+    // Offset so text is centered at page center after rotation
+    const x = cx - (textWidth / 2) * Math.cos(radians) + (textHeight / 2) * Math.sin(radians);
+    const y = cy - (textWidth / 2) * Math.sin(radians) - (textHeight / 2) * Math.cos(radians);
+
+    page.drawText(text, {
+      x,
+      y,
+      size: fontSize,
+      font,
+      color: PDFLib.rgb(r, g, b),
+      opacity,
+      rotate: PDFLib.degrees(rotation),
+    });
+  }
+
+  return doc.save();
+}
