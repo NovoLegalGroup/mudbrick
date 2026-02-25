@@ -32,6 +32,11 @@
       <h1>🧱 Mudbrick</h1>
       <p class="tagline">Free PDF editor. No subscription. No dark patterns.</p>
 
+      <div class="welcome-privacy">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Your files never leave your device
+      </div>
+
       <div id="drop-zone">
         <div class="drop-icon" data-icon="file" data-icon-size="48"></div>
         <div class="drop-text">Drop a PDF or image here</div>
@@ -66,7 +71,7 @@
   <div id="app" class="hidden">
 
     <!-- ── Title Bar ── -->
-    <div id="titlebar">
+    <div id="titlebar" role="banner">
       <div class="brand">
         <div class="brand-icon">M</div>
         <span class="brand-name">Mudbrick</span>
@@ -81,12 +86,12 @@
       </div>
       <span id="status-filename" class="title-filename">No file loaded</span>
       <div class="titlebar-right">
-        <button id="btn-dark-mode" class="titlebar-btn" title="Toggle Dark Mode" data-icon="moon"></button>
+        <button id="btn-dark-mode" class="titlebar-btn" title="Toggle Dark Mode" aria-label="Toggle dark mode" data-icon="moon"></button>
       </div>
     </div>
 
     <!-- ── Ribbon Tab Strip ── -->
-    <div id="ribbon-tabs">
+    <div id="ribbon-tabs" role="tablist" aria-label="Tool tabs">
       <button class="ribbon-tab active" data-ribbon="home">Home</button>
       <button class="ribbon-tab" data-ribbon="edit">Edit</button>
       <button class="ribbon-tab" data-ribbon="annotate">Annotate</button>
@@ -96,7 +101,7 @@
     </div>
 
     <!-- ── Ribbon Panel (contextual toolbar) ── -->
-    <div id="ribbon-panel">
+    <div id="ribbon-panel" role="toolbar" aria-label="Active tool options">
 
       <!-- Ribbon: Home (default) -->
       <div class="ribbon-content active" id="ribbon-home">
@@ -510,7 +515,7 @@
     <div id="main-container">
 
       <!-- Left Sidebar -->
-      <aside id="sidebar">
+      <aside id="sidebar" aria-label="Document sidebar">
         <div id="sidebar-tabs">
           <button class="sidebar-tab active" data-sidebar="pages" title="Pages">
             <span data-icon="layout-grid" data-icon-size="14"></span>
@@ -546,12 +551,12 @@
       </aside>
 
       <!-- Canvas Area -->
-      <main id="canvas-area">
+      <main id="canvas-area" role="main" aria-label="PDF document view">
         <!-- Find Bar (Ctrl+F) -->
         <div id="find-bar" class="find-bar hidden">
           <span class="find-icon" data-icon="search" data-icon-size="14"></span>
           <input type="text" id="find-input" class="find-input" placeholder="Find in document…" autocomplete="off" spellcheck="false">
-          <span id="find-match-count" class="find-match-count"></span>
+          <span id="find-match-count" class="find-match-count" aria-live="polite"></span>
           <button id="find-prev" class="find-nav-btn" title="Previous (Shift+Enter)">
             <span data-icon="chevron-up" data-icon-size="14"></span>
           </button>
@@ -642,7 +647,7 @@
       </main>
 
       <!-- Properties Panel (right) -->
-      <aside id="properties-panel" class="hidden">
+      <aside id="properties-panel" class="hidden" aria-label="Properties panel">
         <div class="panel-header">
           <span class="panel-title">Properties</span>
           <button id="btn-close-panel" class="panel-close" title="Close Panel" data-icon="x" data-icon-size="14"></button>
@@ -753,14 +758,14 @@
     </div>
 
     <!-- ── Page Navigation ── -->
-    <div id="page-nav">
+    <nav id="page-nav" aria-label="Page navigation">
       <button id="btn-first-page" class="page-nav-btn" title="First Page (Home)" disabled>
         <span data-icon="chevrons-left" data-icon-size="14"></span>
       </button>
       <button id="btn-prev-page" class="page-nav-btn" title="Previous Page (←)" disabled>
         <span data-icon="chevron-left" data-icon-size="14"></span>
       </button>
-      <input id="page-input" class="page-nav-input" type="number" min="1" value="1">
+      <input id="page-input" class="page-nav-input" type="number" min="1" value="1" aria-label="Current page number">
       <span class="page-nav-text">of <span id="total-pages">0</span></span>
       <button id="btn-next-page" class="page-nav-btn" title="Next Page (→)" disabled>
         <span data-icon="chevron-right" data-icon-size="14"></span>
@@ -770,7 +775,7 @@
       </button>
       <div class="page-nav-sep"></div>
       <span class="page-nav-label">Continuous scroll</span>
-    </div>
+    </nav>
 
     <!-- ── Status Bar ── -->
     <footer id="status-bar">
@@ -803,8 +808,9 @@
   <div id="toast-container"></div>
 
   <!-- ═══════════════════ Loading Overlay ═══════════════════ -->
-  <div id="loading-overlay" class="hidden">
+  <div id="loading-overlay" class="hidden" role="alert" aria-live="assertive">
     <div class="spinner"></div>
+    <span id="loading-text" class="loading-text">Processing...</span>
   </div>
 
   <!-- ═══════════════════ Merge Modal ═══════════════════ -->
@@ -815,8 +821,8 @@
         <button class="modal-close" data-close-modal="merge">&times;</button>
       </div>
       <div class="modal-body">
-        <div id="merge-drop-zone" style="border:2px dashed var(--mb-border);border-radius:var(--mb-radius-md);padding:24px;text-align:center;margin-bottom:16px;cursor:pointer;">
-          <p style="color:var(--mb-text-secondary);">Drop PDF files here or click to add</p>
+        <div id="merge-drop-zone" class="modal-drop-zone modal-form-section">
+          <p>Drop PDF files here or click to add</p>
           <input type="file" id="merge-file-input" accept=".pdf" multiple hidden>
         </div>
         <ul class="file-list" id="merge-file-list"></ul>
@@ -836,13 +842,12 @@
         <button class="modal-close" data-close-modal="split">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="margin-bottom:12px;color:var(--mb-text-secondary);font-size:13px;">
+        <p class="modal-form-hint">
           Enter page ranges separated by commas. Example: 1-3, 5, 7-12
         </p>
-        <input type="text" id="split-range-input"
-          style="width:100%;padding:8px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);font-size:14px;background:var(--mb-surface);color:var(--mb-text);"
+        <input type="text" id="split-range-input" class="modal-form-input"
           placeholder="e.g. 1-3, 5, 7-12">
-        <div id="split-preview" style="margin-top:12px;font-size:13px;color:var(--mb-text-secondary);"></div>
+        <div id="split-preview" style="margin-top:12px;" class="modal-form-hint"></div>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" data-close-modal="split">Cancel</button>
@@ -859,42 +864,37 @@
         <button class="modal-close" data-close-modal="watermark">&times;</button>
       </div>
       <div class="modal-body">
-        <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="modal-form-stack">
           <div>
-            <label style="font-size:13px;color:var(--mb-text-secondary);display:block;margin-bottom:4px;">Text</label>
-            <input type="text" id="watermark-text" value="CONFIDENTIAL"
-              style="width:100%;padding:8px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);font-size:14px;background:var(--mb-surface);color:var(--mb-text);"
+            <label class="modal-form-label">Text</label>
+            <input type="text" id="watermark-text" value="CONFIDENTIAL" class="modal-form-input"
               placeholder="Watermark text">
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="modal-form-grid">
             <div>
-              <label style="font-size:13px;color:var(--mb-text-secondary);display:block;margin-bottom:4px;">Font Size</label>
-              <input type="number" id="watermark-size" value="60" min="10" max="200"
-                style="width:100%;padding:8px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);font-size:14px;background:var(--mb-surface);color:var(--mb-text);">
+              <label class="modal-form-label">Font Size</label>
+              <input type="number" id="watermark-size" value="60" min="10" max="200" class="modal-form-input">
             </div>
             <div>
-              <label style="font-size:13px;color:var(--mb-text-secondary);display:block;margin-bottom:4px;">Rotation (°)</label>
-              <input type="number" id="watermark-rotation" value="-45" min="-180" max="180"
-                style="width:100%;padding:8px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);font-size:14px;background:var(--mb-surface);color:var(--mb-text);">
+              <label class="modal-form-label">Rotation (&deg;)</label>
+              <input type="number" id="watermark-rotation" value="-45" min="-180" max="180" class="modal-form-input">
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="modal-form-grid">
             <div>
-              <label style="font-size:13px;color:var(--mb-text-secondary);display:block;margin-bottom:4px;">Opacity</label>
+              <label class="modal-form-label">Opacity</label>
               <input type="range" id="watermark-opacity" min="0.05" max="0.5" step="0.05" value="0.15"
                 style="width:100%;">
               <span id="watermark-opacity-value" style="font-size:12px;color:var(--mb-text-muted);">15%</span>
             </div>
             <div>
-              <label style="font-size:13px;color:var(--mb-text-secondary);display:block;margin-bottom:4px;">Color</label>
-              <input type="color" id="watermark-color" value="#888888"
-                style="width:100%;height:36px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);background:var(--mb-surface);cursor:pointer;">
+              <label class="modal-form-label">Color</label>
+              <input type="color" id="watermark-color" value="#888888" class="modal-form-color">
             </div>
           </div>
           <div>
-            <label style="font-size:13px;color:var(--mb-text-secondary);display:block;margin-bottom:4px;">Apply to</label>
-            <select id="watermark-pages"
-              style="width:100%;padding:8px 12px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);font-size:14px;background:var(--mb-surface);color:var(--mb-text);">
+            <label class="modal-form-label">Apply to</label>
+            <select id="watermark-pages" class="modal-form-input">
               <option value="all">All Pages</option>
               <option value="current">Current Page Only</option>
             </select>
@@ -916,8 +916,8 @@
         <button class="modal-close" data-close-modal="bates">&times;</button>
       </div>
       <div class="modal-body">
-        <div style="display:flex;flex-direction:column;gap:14px;">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="modal-form-stack">
+          <div class="modal-form-grid">
             <div>
               <label class="bates-label">Prefix</label>
               <input type="text" id="bates-prefix" value="" placeholder="e.g. DOC-"
@@ -929,7 +929,7 @@
                 class="bates-field">
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="modal-form-grid">
             <div>
               <label class="bates-label">Start Number</label>
               <input type="number" id="bates-start" value="1" min="0"
@@ -941,7 +941,7 @@
                 class="bates-field">
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="modal-form-grid">
             <div>
               <label class="bates-label">Position</label>
               <select id="bates-position" class="bates-field">
@@ -959,11 +959,10 @@
                 class="bates-field">
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="modal-form-grid">
             <div>
               <label class="bates-label">Color</label>
-              <input type="color" id="bates-color" value="#000000"
-                style="width:100%;height:36px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);background:var(--mb-surface);cursor:pointer;">
+              <input type="color" id="bates-color" value="#000000" class="modal-form-color">
             </div>
             <div>
               <label class="bates-label">Page Range</label>
@@ -998,10 +997,10 @@
         <h3>Headers &amp; Footers</h3>
         <button class="modal-close" data-close-modal="hf">&times;</button>
       </div>
-      <div class="modal-body" style="padding:20px 24px">
+      <div class="modal-body">
 
         <!-- Token helper -->
-        <div style="margin-bottom:16px">
+        <div class="modal-form-section">
           <label class="bates-label">Insert Token:</label>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="btn-secondary btn-sm hf-token-btn" data-token="{page}">Page #</button>
@@ -1012,9 +1011,9 @@
         </div>
 
         <!-- Header row -->
-        <div style="margin-bottom:12px">
-          <label class="bates-label" style="font-weight:600">Header</label>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div class="modal-form-section">
+          <label class="modal-form-label-bold">Header</label>
+          <div class="modal-form-grid-3" style="gap:8px">
             <div>
               <label class="bates-label">Left</label>
               <input id="hf-top-left" class="bates-field hf-zone" placeholder="e.g. {filename}">
@@ -1031,9 +1030,9 @@
         </div>
 
         <!-- Footer row -->
-        <div style="margin-bottom:16px">
-          <label class="bates-label" style="font-weight:600">Footer</label>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div class="modal-form-section">
+          <label class="modal-form-label-bold">Footer</label>
+          <div class="modal-form-grid-3" style="gap:8px">
             <div>
               <label class="bates-label">Left</label>
               <input id="hf-bottom-left" class="bates-field hf-zone" placeholder="">
@@ -1050,40 +1049,42 @@
         </div>
 
         <!-- Options row -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
-          <div>
-            <label class="bates-label">Font Size</label>
-            <input id="hf-font-size" type="number" class="bates-field" value="10" min="6" max="36">
-          </div>
-          <div>
-            <label class="bates-label">Color</label>
-            <input id="hf-color" type="color" class="bates-field" value="#000000" style="height:38px;padding:4px">
-          </div>
-          <div>
-            <label class="bates-label">Page Range</label>
-            <select id="hf-page-range" class="bates-field">
-              <option value="all">All Pages</option>
-              <option value="custom">Custom</option>
-            </select>
+        <div class="modal-form-section">
+          <div class="modal-form-grid-3">
+            <div>
+              <label class="bates-label">Font Size</label>
+              <input id="hf-font-size" type="number" class="bates-field" value="10" min="6" max="36">
+            </div>
+            <div>
+              <label class="bates-label">Color</label>
+              <input id="hf-color" type="color" class="bates-field modal-form-color" value="#000000">
+            </div>
+            <div>
+              <label class="bates-label">Page Range</label>
+              <select id="hf-page-range" class="bates-field">
+                <option value="all">All Pages</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
           </div>
         </div>
 
         <!-- Custom range (hidden by default) -->
-        <div id="hf-custom-range" class="hidden" style="margin-bottom:16px">
+        <div id="hf-custom-range" class="hidden modal-form-section">
           <label class="bates-label">Pages (e.g. 1-5, 8, 10-12)</label>
           <input id="hf-range-input" class="bates-field" placeholder="1-5, 8, 10-12">
         </div>
 
         <!-- Preview -->
         <div class="bates-preview-box">
-          <span class="bates-label" style="margin-bottom:4px">Preview (page 1 of 10)</span>
-          <div id="hf-preview" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;font-family:'Courier New',monospace;font-size:12px">
-            <span id="hf-prev-tl" style="text-align:left;color:var(--mb-text-secondary)">—</span>
-            <span id="hf-prev-tc" style="text-align:center;color:var(--mb-text-secondary)">—</span>
-            <span id="hf-prev-tr" style="text-align:right;color:var(--mb-text-secondary)">—</span>
-            <span id="hf-prev-bl" style="text-align:left;color:var(--mb-text-secondary)">—</span>
-            <span id="hf-prev-bc" style="text-align:center;color:var(--mb-text-secondary)">—</span>
-            <span id="hf-prev-br" style="text-align:right;color:var(--mb-text-secondary)">—</span>
+          <span class="modal-preview-title">Preview (page 1 of 10)</span>
+          <div id="hf-preview" class="hf-preview-grid">
+            <span id="hf-prev-tl" class="hf-preview-cell hf-preview-left">—</span>
+            <span id="hf-prev-tc" class="hf-preview-cell hf-preview-center">—</span>
+            <span id="hf-prev-tr" class="hf-preview-cell hf-preview-right">—</span>
+            <span id="hf-prev-bl" class="hf-preview-cell hf-preview-left">—</span>
+            <span id="hf-prev-bc" class="hf-preview-cell hf-preview-center">—</span>
+            <span id="hf-prev-br" class="hf-preview-cell hf-preview-right">—</span>
           </div>
         </div>
 
@@ -1124,36 +1125,28 @@
         <h2>Signature</h2>
         <button class="modal-close" data-close-modal="signature">&times;</button>
       </div>
-      <div class="modal-body" style="padding:16px 20px">
+      <div class="modal-body">
         <!-- Tabs -->
-        <div style="display:flex;gap:0;border-bottom:1px solid var(--mb-border);margin-bottom:14px;">
-          <button class="sig-tab active" data-sig-tab="draw"
-            style="flex:1;padding:8px 0;border:none;background:none;font-size:13px;font-weight:600;cursor:pointer;color:var(--mb-text);border-bottom:2px solid transparent;"
-          >Draw</button>
-          <button class="sig-tab" data-sig-tab="type"
-            style="flex:1;padding:8px 0;border:none;background:none;font-size:13px;font-weight:600;cursor:pointer;color:var(--mb-text-muted);border-bottom:2px solid transparent;"
-          >Type</button>
-          <button class="sig-tab" data-sig-tab="upload"
-            style="flex:1;padding:8px 0;border:none;background:none;font-size:13px;font-weight:600;cursor:pointer;color:var(--mb-text-muted);border-bottom:2px solid transparent;"
-          >Upload</button>
+        <div class="sig-tabs-bar">
+          <button class="sig-tab active" data-sig-tab="draw">Draw</button>
+          <button class="sig-tab" data-sig-tab="type">Type</button>
+          <button class="sig-tab" data-sig-tab="upload">Upload</button>
         </div>
 
         <!-- Draw Pane -->
         <div class="sig-pane" data-sig-pane="draw">
-          <div style="border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);overflow:hidden;background:#fff;">
+          <div class="sig-canvas-wrap">
             <canvas id="sig-draw-canvas" width="420" height="160"></canvas>
           </div>
-          <button id="sig-draw-clear" class="btn-secondary" style="margin-top:8px;font-size:12px;padding:4px 12px;">Clear</button>
+          <button id="sig-draw-clear" class="btn-secondary btn-sm" style="margin-top:8px;">Clear</button>
         </div>
 
         <!-- Type Pane -->
         <div class="sig-pane hidden" data-sig-pane="type">
-          <input type="text" id="sig-type-input" placeholder="Your name"
-            style="width:100%;padding:10px 14px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);font-size:28px;font-family:'Dancing Script',cursive;background:var(--mb-surface);color:var(--mb-text);margin-bottom:10px;">
+          <input type="text" id="sig-type-input" class="sig-type-field" placeholder="Your name">
           <div>
-            <label style="font-size:12px;color:var(--mb-text-secondary);margin-bottom:4px;display:block;">Font Style</label>
-            <select id="sig-type-font"
-              style="width:100%;padding:6px 10px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);font-size:13px;background:var(--mb-surface);color:var(--mb-text);">
+            <label class="modal-form-label">Font Style</label>
+            <select id="sig-type-font" class="modal-form-input">
               <option value="Dancing Script">Cursive (Dancing Script)</option>
               <option value="Caveat">Handwritten (Caveat)</option>
               <option value="Great Vibes">Elegant (Great Vibes)</option>
@@ -1164,20 +1157,20 @@
 
         <!-- Upload Pane -->
         <div class="sig-pane hidden" data-sig-pane="upload">
-          <div style="border:2px dashed var(--mb-border);border-radius:var(--mb-radius-sm);padding:24px;text-align:center;">
-            <label for="sig-upload-input" style="cursor:pointer;color:var(--mb-accent);font-size:13px;font-weight:600;">
+          <div class="modal-drop-zone">
+            <label for="sig-upload-input" class="sig-upload-label">
               Choose an image file
             </label>
             <input type="file" id="sig-upload-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
-            <p style="font-size:11px;color:var(--mb-text-muted);margin:6px 0 0;">PNG with transparent background recommended</p>
+            <p class="drop-hint">PNG with transparent background recommended</p>
           </div>
-          <img id="sig-upload-preview" class="hidden" style="max-width:100%;max-height:100px;margin-top:10px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);" alt="Preview">
+          <img id="sig-upload-preview" class="hidden sig-upload-img" alt="Preview">
         </div>
 
         <!-- Saved Signatures -->
-        <div style="margin-top:16px;border-top:1px solid var(--mb-border);padding-top:12px;">
-          <div style="font-size:12px;font-weight:600;color:var(--mb-text-secondary);margin-bottom:8px;">Saved Signatures</div>
-          <div id="sig-saved-list" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+        <div class="sig-saved-section">
+          <div class="sig-saved-title">Saved Signatures</div>
+          <div id="sig-saved-list" class="sig-saved-list"></div>
         </div>
       </div>
       <div class="modal-footer">
@@ -1199,36 +1192,36 @@
         <button class="modal-close" data-close-modal="ocr">×</button>
       </div>
       <div class="modal-body">
-        <p style="font-size:13px;color:var(--mb-text-secondary);margin-bottom:16px;">
+        <p class="modal-form-hint">
           Recognize text in scanned pages so you can search and select text. Uses Tesseract.js (runs locally in your browser).
         </p>
 
         <!-- Page selection -->
-        <div style="margin-bottom:16px;">
-          <label style="font-size:12px;font-weight:600;display:block;margin-bottom:8px;">Pages to OCR</label>
-          <div style="display:flex;flex-direction:column;gap:8px;">
-            <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+        <div class="modal-form-section">
+          <label class="modal-form-label-bold">Pages to OCR</label>
+          <div class="modal-radio-list">
+            <label>
               <input type="radio" name="ocr-scope" value="current" checked> Current page
             </label>
-            <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <label>
               <input type="radio" name="ocr-scope" value="all"> All pages
             </label>
-            <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <label>
               <input type="radio" name="ocr-scope" value="range"> Page range
               <input type="text" id="ocr-range-input" placeholder="e.g. 1-5, 8"
-                style="width:120px;padding:4px 8px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);font-size:12px;background:var(--mb-surface-alt);color:var(--mb-text);">
+                class="modal-form-input" style="width:120px;padding:4px 8px;font-size:12px;">
             </label>
           </div>
         </div>
 
         <!-- Progress area (hidden until running) -->
         <div id="ocr-progress-area" class="hidden" style="margin-top:12px;">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
-            <span id="ocr-progress-label">Starting…</span>
+          <div class="modal-progress-header">
+            <span id="ocr-progress-label">Starting...</span>
             <span id="ocr-progress-pct">0%</span>
           </div>
-          <div style="height:6px;background:var(--mb-surface-alt);border-radius:3px;overflow:hidden;">
-            <div id="ocr-progress-bar" style="height:100%;width:0%;background:var(--mb-brand);border-radius:3px;transition:width 200ms;"></div>
+          <div class="modal-progress-bar-wrapper">
+            <div id="ocr-progress-bar" class="modal-progress-bar-fill" style="width:0%;"></div>
           </div>
         </div>
       </div>
@@ -1247,7 +1240,7 @@
         <button class="modal-close" data-close-modal="encrypt">&times;</button>
       </div>
       <div class="modal-body">
-        <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="modal-form-stack">
           <div>
             <label class="bates-label">User Password (to open)</label>
             <input type="password" id="encrypt-user-pw" class="bates-field" placeholder="Leave blank for no open password">
@@ -1258,22 +1251,12 @@
           </div>
           <div>
             <label class="bates-label">Permissions</label>
-            <div style="display:flex;flex-direction:column;gap:6px;font-size:13px;">
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="perm-print" checked> Allow Printing
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="perm-copy" checked> Allow Copying
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="perm-modify" checked> Allow Modifying
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="perm-annotate" checked> Allow Annotating
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="checkbox" id="perm-fill-forms"> Allow Form Filling Only
-              </label>
+            <div class="modal-checkbox-list">
+              <label><input type="checkbox" id="perm-print" checked> Allow Printing</label>
+              <label><input type="checkbox" id="perm-copy" checked> Allow Copying</label>
+              <label><input type="checkbox" id="perm-modify" checked> Allow Modifying</label>
+              <label><input type="checkbox" id="perm-annotate" checked> Allow Annotating</label>
+              <label><input type="checkbox" id="perm-fill-forms"> Allow Form Filling Only</label>
             </div>
           </div>
         </div>
@@ -1293,7 +1276,7 @@
         <button class="modal-close" data-close-modal="metadata">&times;</button>
       </div>
       <div class="modal-body">
-        <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="modal-form-stack">
           <div>
             <label class="bates-label">Title</label>
             <input type="text" id="meta-title" class="bates-field" placeholder="Document title">
@@ -1329,7 +1312,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-secondary" id="btn-meta-remove" style="color:var(--mb-danger);">Remove All Metadata</button>
+        <button class="btn-secondary btn-danger-text" id="btn-meta-remove">Remove All Metadata</button>
         <button class="btn-secondary" data-close-modal="metadata">Cancel</button>
         <button class="btn-primary" id="btn-meta-save">Save Metadata</button>
       </div>
@@ -1344,34 +1327,22 @@
         <button class="modal-close" data-close-modal="redact-search">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="font-size:13px;color:var(--mb-text-secondary);margin-bottom:16px;">
+        <p class="modal-form-hint">
           Auto-detect and redact sensitive data. Select patterns to search for:
         </p>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
-          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" class="redact-pattern-cb" value="ssn"> Social Security Numbers (XXX-XX-XXXX)
-          </label>
-          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" class="redact-pattern-cb" value="creditCard"> Credit Card Numbers
-          </label>
-          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" class="redact-pattern-cb" value="email"> Email Addresses
-          </label>
-          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" class="redact-pattern-cb" value="phone"> Phone Numbers
-          </label>
-          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" class="redact-pattern-cb" value="date"> Dates
-          </label>
-          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="checkbox" class="redact-pattern-cb" value="custom"> Custom Pattern
-          </label>
+        <div class="modal-checkbox-list modal-form-section">
+          <label><input type="checkbox" class="redact-pattern-cb" value="ssn"> Social Security Numbers (XXX-XX-XXXX)</label>
+          <label><input type="checkbox" class="redact-pattern-cb" value="creditCard"> Credit Card Numbers</label>
+          <label><input type="checkbox" class="redact-pattern-cb" value="email"> Email Addresses</label>
+          <label><input type="checkbox" class="redact-pattern-cb" value="phone"> Phone Numbers</label>
+          <label><input type="checkbox" class="redact-pattern-cb" value="date"> Dates</label>
+          <label><input type="checkbox" class="redact-pattern-cb" value="custom"> Custom Pattern</label>
         </div>
-        <div id="redact-custom-row" class="hidden" style="margin-bottom:16px;">
+        <div id="redact-custom-row" class="hidden modal-form-section">
           <label class="bates-label">Custom Regex or Text</label>
           <input type="text" id="redact-custom-input" class="bates-field" placeholder="e.g. ACME Corp or \\d{3}-\\d{4}">
         </div>
-        <div id="redact-results" class="hidden" style="border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);max-height:200px;overflow-y:auto;padding:8px;">
+        <div id="redact-results" class="hidden modal-preview-box" style="max-height:200px;overflow-y:auto;">
           <div id="redact-results-list" style="font-size:13px;"></div>
         </div>
       </div>
@@ -1391,7 +1362,7 @@
         <button class="modal-close" data-close-modal="export-image">&times;</button>
       </div>
       <div class="modal-body">
-        <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="modal-form-stack">
           <div>
             <label class="bates-label">Pages</label>
             <select id="export-img-scope" class="bates-field">
@@ -1404,7 +1375,7 @@
             <label class="bates-label">Page Range (e.g. 1-5, 8)</label>
             <input type="text" id="export-img-range" class="bates-field" placeholder="1-5, 8, 10-12">
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="modal-form-grid">
             <div>
               <label class="bates-label">Format</label>
               <select id="export-img-format" class="bates-field">
@@ -1444,13 +1415,13 @@
         <button class="modal-close" data-close-modal="create-from-images">&times;</button>
       </div>
       <div class="modal-body">
-        <div id="images-drop-zone" style="border:2px dashed var(--mb-border);border-radius:var(--mb-radius-md);padding:24px;text-align:center;margin-bottom:16px;cursor:pointer;">
-          <p style="color:var(--mb-text-secondary);">Drop image files here or click to add</p>
-          <p style="font-size:11px;color:var(--mb-text-muted);">PNG, JPEG, GIF, WebP</p>
+        <div id="images-drop-zone" class="modal-drop-zone modal-form-section">
+          <p>Drop image files here or click to add</p>
+          <p class="drop-hint">PNG, JPEG, GIF, WebP</p>
           <input type="file" id="images-file-input" accept="image/*" multiple hidden>
         </div>
         <ul class="file-list" id="images-file-list"></ul>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+        <div class="modal-form-grid" style="margin-top:12px;">
           <div>
             <label class="bates-label">Page Size</label>
             <select id="images-page-size" class="bates-field">
@@ -1481,10 +1452,10 @@
         <button class="modal-close" data-close-modal="optimize">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="font-size:13px;color:var(--mb-text-secondary);margin-bottom:16px;">
+        <p class="modal-form-hint">
           Reduce file size by re-rendering pages as compressed images. Text will be rasterized (lossy).
         </p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="modal-form-grid">
           <div>
             <label class="bates-label">DPI</label>
             <select id="optimize-dpi" class="bates-field">
@@ -1499,7 +1470,7 @@
             <span id="optimize-quality-val" style="font-size:12px;color:var(--mb-text-muted);">75%</span>
           </div>
         </div>
-        <div id="optimize-result" class="hidden" style="margin-top:16px;padding:12px;background:var(--mb-surface-sunken);border-radius:var(--mb-radius-sm);font-size:13px;"></div>
+        <div id="optimize-result" class="hidden modal-preview-box" style="margin-top:16px;font-size:13px;"></div>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" data-close-modal="optimize">Cancel</button>
@@ -1515,17 +1486,17 @@
         <h2>Compare Documents</h2>
         <button class="modal-close" data-close-modal="compare">&times;</button>
       </div>
-      <div class="modal-body" style="padding:16px 20px;">
+      <div class="modal-body">
         <!-- File selection (shown first) -->
         <div id="compare-setup">
-          <p style="font-size:13px;color:var(--mb-text-secondary);margin-bottom:16px;">
+          <p class="modal-form-hint">
             Compare the current document with another PDF to see differences.
           </p>
-          <div style="border:2px dashed var(--mb-border);border-radius:var(--mb-radius-md);padding:24px;text-align:center;cursor:pointer;" id="compare-drop-zone">
-            <p style="color:var(--mb-text-secondary);">Drop the second PDF here or click to select</p>
+          <div id="compare-drop-zone" class="modal-drop-zone">
+            <p>Drop the second PDF here or click to select</p>
             <input type="file" id="compare-file-input" accept=".pdf" hidden>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+          <div class="modal-form-grid" style="margin-top:12px;">
             <div>
               <label class="bates-label">Comparison DPI</label>
               <select id="compare-dpi" class="bates-field">
@@ -1546,30 +1517,30 @@
         </div>
         <!-- Results (shown after comparison) -->
         <div id="compare-results" class="hidden">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <div id="compare-summary" style="font-size:13px;color:var(--mb-text-secondary);"></div>
-            <div style="display:flex;gap:6px;">
+          <div class="compare-results-header">
+            <div id="compare-summary" class="modal-form-hint" style="margin-bottom:0;"></div>
+            <div class="compare-nav">
               <select id="compare-view-mode" class="bates-field" style="width:auto;">
                 <option value="side-by-side">Side by Side</option>
                 <option value="overlay">Overlay</option>
                 <option value="diff-only">Diff Only</option>
               </select>
               <button class="btn-secondary btn-sm" id="btn-compare-prev" disabled>&larr; Prev</button>
-              <span id="compare-page-info" style="font-size:13px;padding:4px 8px;">Page 1</span>
+              <span id="compare-page-info" class="compare-page-info">Page 1</span>
               <button class="btn-secondary btn-sm" id="btn-compare-next" disabled>Next &rarr;</button>
             </div>
           </div>
-          <div id="compare-view" style="min-height:300px;border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);padding:8px;background:var(--mb-surface-sunken);"></div>
-          <pre id="compare-report" class="hidden" style="margin-top:12px;font-size:12px;max-height:200px;overflow:auto;padding:12px;background:var(--mb-surface-sunken);border-radius:var(--mb-radius-sm);"></pre>
+          <div id="compare-view" class="compare-view-area"></div>
+          <pre id="compare-report" class="hidden modal-preview-box" style="margin-top:12px;font-size:12px;max-height:200px;overflow:auto;"></pre>
         </div>
         <!-- Progress -->
         <div id="compare-progress" class="hidden" style="margin-top:12px;">
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
-            <span id="compare-progress-label">Comparing…</span>
+          <div class="modal-progress-header">
+            <span id="compare-progress-label">Comparing...</span>
             <span id="compare-progress-pct">0%</span>
           </div>
-          <div style="height:6px;background:var(--mb-surface-alt);border-radius:3px;overflow:hidden;">
-            <div id="compare-progress-bar" style="height:100%;width:0%;background:var(--mb-brand);border-radius:3px;transition:width 200ms;"></div>
+          <div class="modal-progress-bar-wrapper">
+            <div id="compare-progress-bar" class="modal-progress-bar-fill" style="width:0%;"></div>
           </div>
         </div>
       </div>
@@ -1589,21 +1560,21 @@
         <button class="modal-close" data-close-modal="comment-summary">&times;</button>
       </div>
       <div class="modal-body">
-        <div id="comment-summary-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">
-          <div style="background:var(--mb-surface-sunken);padding:12px;border-radius:var(--mb-radius-sm);text-align:center;">
-            <div id="comment-stat-total" style="font-size:24px;font-weight:700;color:var(--mb-brand);">0</div>
-            <div style="font-size:11px;color:var(--mb-text-muted);">Total Annotations</div>
+        <div id="comment-summary-stats" class="modal-stat-grid">
+          <div class="modal-stat-card">
+            <div id="comment-stat-total" class="modal-stat-value">0</div>
+            <div class="modal-stat-label">Total Annotations</div>
           </div>
-          <div style="background:var(--mb-surface-sunken);padding:12px;border-radius:var(--mb-radius-sm);text-align:center;">
-            <div id="comment-stat-pages" style="font-size:24px;font-weight:700;color:var(--mb-brand);">0</div>
-            <div style="font-size:11px;color:var(--mb-text-muted);">Pages With Annotations</div>
+          <div class="modal-stat-card">
+            <div id="comment-stat-pages" class="modal-stat-value">0</div>
+            <div class="modal-stat-label">Pages With Annotations</div>
           </div>
-          <div style="background:var(--mb-surface-sunken);padding:12px;border-radius:var(--mb-radius-sm);text-align:center;">
-            <div id="comment-stat-types" style="font-size:24px;font-weight:700;color:var(--mb-brand);">0</div>
-            <div style="font-size:11px;color:var(--mb-text-muted);">Annotation Types</div>
+          <div class="modal-stat-card">
+            <div id="comment-stat-types" class="modal-stat-value">0</div>
+            <div class="modal-stat-label">Annotation Types</div>
           </div>
         </div>
-        <div style="margin-bottom:12px;">
+        <div class="modal-form-section">
           <label class="bates-label">Export Format</label>
           <select id="comment-export-format" class="bates-field" style="width:auto;">
             <option value="text">Plain Text</option>
@@ -1611,10 +1582,10 @@
             <option value="csv">CSV</option>
           </select>
         </div>
-        <pre id="comment-summary-preview" style="max-height:250px;overflow:auto;padding:12px;background:var(--mb-surface-sunken);border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);font-size:12px;white-space:pre-wrap;"></pre>
+        <pre id="comment-summary-preview" class="comment-summary-preview"></pre>
       </div>
       <div class="modal-footer">
-        <button class="btn-secondary" id="btn-flatten-anno-exec" style="color:var(--mb-danger);">Flatten All</button>
+        <button class="btn-secondary btn-danger-text" id="btn-flatten-anno-exec">Flatten All</button>
         <button class="btn-secondary" data-close-modal="comment-summary">Close</button>
         <button class="btn-primary" id="btn-comment-download">Download</button>
       </div>
@@ -1631,19 +1602,19 @@
       <div class="modal-body">
         <!-- Import pane -->
         <div id="form-import-pane" class="hidden">
-          <p style="font-size:13px;color:var(--mb-text-secondary);margin-bottom:12px;">
+          <p class="modal-form-hint">
             Import form data from a JSON, XFDF, or CSV file.
           </p>
-          <div style="border:2px dashed var(--mb-border);border-radius:var(--mb-radius-md);padding:24px;text-align:center;cursor:pointer;" id="form-import-drop-zone">
-            <p style="color:var(--mb-text-secondary);">Drop file here or click to select</p>
-            <p style="font-size:11px;color:var(--mb-text-muted);">JSON, XFDF, or CSV</p>
+          <div id="form-import-drop-zone" class="modal-drop-zone">
+            <p>Drop file here or click to select</p>
+            <p class="drop-hint">JSON, XFDF, or CSV</p>
             <input type="file" id="form-import-file-input" accept=".json,.xfdf,.csv" hidden>
           </div>
-          <div id="form-import-preview" class="hidden" style="margin-top:12px;padding:12px;background:var(--mb-surface-sunken);border-radius:var(--mb-radius-sm);font-size:12px;max-height:150px;overflow:auto;"></div>
+          <div id="form-import-preview" class="hidden modal-preview-box" style="margin-top:12px;font-size:12px;max-height:150px;overflow:auto;"></div>
         </div>
         <!-- Export pane -->
         <div id="form-export-pane" class="hidden">
-          <p style="font-size:13px;color:var(--mb-text-secondary);margin-bottom:12px;">
+          <p class="modal-form-hint">
             Export current form data to a file.
           </p>
           <label class="bates-label">Format</label>
@@ -1678,12 +1649,11 @@
         </select>
         <label class="bates-label" style="margin-top:12px;">Prefix (optional)</label>
         <input type="text" id="exhibit-prefix" class="bates-field" placeholder="e.g. Plaintiff's ">
-        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" id="exhibit-include-date" checked>
-          Include date on stamp
+        <label class="modal-checkbox-list" style="margin-top:12px;">
+          <label><input type="checkbox" id="exhibit-include-date" checked> Include date on stamp</label>
         </label>
-        <div style="margin-top:16px;padding:16px;background:var(--mb-surface-secondary);border-radius:var(--mb-radius-md);text-align:center;">
-          <p style="margin:0 0 4px;font-size:11px;color:var(--mb-text-muted);">Preview</p>
+        <div class="modal-preview-box" style="margin-top:16px;text-align:center;padding:16px;">
+          <p class="modal-preview-title">Preview</p>
           <div id="exhibit-preview" style="font-weight:bold;color:#1565c0;font-size:18px;">EXHIBIT A</div>
         </div>
         <p style="margin-top:12px;font-size:12px;color:var(--mb-text-muted);">
@@ -1705,21 +1675,20 @@
         <button class="modal-close" data-close-modal="sanitize">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="margin:0 0 12px;font-size:13px;color:var(--mb-text-secondary);">
+        <p class="modal-form-hint">
           Remove all hidden data before filing or sharing. This will strip:
         </p>
-        <div style="padding:12px;background:var(--mb-surface-secondary);border-radius:var(--mb-radius-md);">
-          <ul style="margin:0 0 0 20px;font-size:13px;color:var(--mb-text);line-height:1.8;">
+        <div class="modal-info-box">
+          <ul>
             <li>Document title, author, subject, keywords</li>
             <li>Creator and producer software tags</li>
             <li>Creation and modification dates</li>
             <li>Revision history and XMP metadata</li>
           </ul>
         </div>
-        <label style="display:flex;align-items:center;gap:8px;margin-top:16px;font-size:13px;cursor:pointer;">
-          <input type="checkbox" id="sanitize-confirm">
-          I understand this cannot be undone
-        </label>
+        <div class="modal-checkbox-list" style="margin-top:16px;">
+          <label><input type="checkbox" id="sanitize-confirm"> I understand this cannot be undone</label>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" data-close-modal="sanitize">Cancel</button>
@@ -1736,16 +1705,16 @@
         <button class="modal-close" data-close-modal="page-labels">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="margin:0 0 12px;font-size:13px;color:var(--mb-text-secondary);">
+        <p class="modal-form-hint">
           Define custom numbering for different document sections (e.g. roman numerals for front matter).
         </p>
-        <div id="page-labels-list" style="display:flex;flex-direction:column;gap:8px;max-height:250px;overflow-y:auto;">
+        <div id="page-labels-list" class="page-labels-list">
           <!-- Rows added dynamically -->
         </div>
         <button id="btn-add-label-range" class="btn-secondary" style="margin-top:12px;width:100%;font-size:13px;">+ Add Range</button>
-        <div style="margin-top:12px;padding:12px;background:var(--mb-surface-secondary);border-radius:var(--mb-radius-md);max-height:120px;overflow-y:auto;">
-          <p style="margin:0 0 4px;font-size:11px;color:var(--mb-text-muted);">Preview</p>
-          <div id="page-labels-preview" style="font-size:12px;color:var(--mb-text);display:flex;flex-wrap:wrap;gap:4px;"></div>
+        <div class="modal-preview-box" style="margin-top:12px;max-height:120px;overflow-y:auto;">
+          <p class="modal-preview-title">Preview</p>
+          <div id="page-labels-preview" class="page-labels-preview"></div>
         </div>
       </div>
       <div class="modal-footer">
@@ -1763,33 +1732,32 @@
         <button class="modal-close" data-close-modal="replace-pages">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="margin:0 0 12px;font-size:13px;color:var(--mb-text-secondary);">
+        <p class="modal-form-hint">
           Replace pages in the current document with pages from another PDF.
         </p>
-        <div id="replace-source-drop" style="border:2px dashed var(--mb-border);border-radius:var(--mb-radius-md);padding:24px;text-align:center;cursor:pointer;">
-          <p style="color:var(--mb-text-secondary);margin:0;">Click to choose source PDF</p>
-          <p style="font-size:11px;color:var(--mb-text-muted);margin:4px 0 0;">or drag and drop</p>
+        <div id="replace-source-drop" class="modal-drop-zone">
+          <p>Click to choose source PDF</p>
+          <p class="drop-hint">or drag and drop</p>
           <input type="file" id="replace-file-input" accept=".pdf" hidden>
         </div>
         <div id="replace-mapping" class="hidden" style="margin-top:16px;">
-          <p style="font-size:13px;color:var(--mb-text-secondary);margin:0 0 8px;">
+          <p class="modal-form-hint" style="margin-bottom:8px;">
             Source: <strong id="replace-source-name"></strong> (<span id="replace-source-pages"></span> pages)
           </p>
-          <div style="border:1px solid var(--mb-border);border-radius:var(--mb-radius-sm);overflow:auto;max-height:250px;">
-            <table style="width:100%;border-collapse:collapse;font-size:13px;">
-              <thead style="background:var(--mb-surface-secondary);position:sticky;top:0;">
+          <div class="replace-table-wrap">
+            <table class="replace-table">
+              <thead>
                 <tr>
-                  <th style="padding:8px;text-align:left;border-bottom:1px solid var(--mb-border);">Current Page</th>
-                  <th style="padding:8px;text-align:left;border-bottom:1px solid var(--mb-border);">Replace With</th>
+                  <th>Current Page</th>
+                  <th>Replace With</th>
                 </tr>
               </thead>
               <tbody id="replace-mappings-list"></tbody>
             </table>
           </div>
-          <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:var(--mb-text-muted);cursor:pointer;">
-            <input type="checkbox" id="replace-confirm">
-            I understand replaced pages cannot be recovered
-          </label>
+          <div class="modal-checkbox-list" style="margin-top:12px;font-size:12px;color:var(--mb-text-muted);">
+            <label><input type="checkbox" id="replace-confirm"> I understand replaced pages cannot be recovered</label>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
