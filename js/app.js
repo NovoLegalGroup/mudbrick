@@ -169,6 +169,8 @@ async function boot() {
 
     // Wire up all UI events
     wireEvents();
+    initDropdownMenus();
+    initModalFocusTrapping();
 
     // Replace emoji placeholders with SVG icons
     replaceIcons();
@@ -194,6 +196,9 @@ async function boot() {
     $('btn-clear-recent')?.addEventListener('click', () => {
       clearRecentFiles();
     });
+
+    // Offline detection
+    initOfflineIndicator();
 
     console.log('Mudbrick ready');
   } catch (e) {
@@ -297,7 +302,7 @@ async function handleFiles(files) {
     return;
   }
 
-  showLoading();
+  showLoading('Opening file…');
   try {
     if (isImage) {
       const pdfBytes = await createPDFFromImages([file], { pageSize: 'fit' });
@@ -547,6 +552,9 @@ function goToPage(pageNum) {
   // Scroll thumbnail into view
   const thumb = DOM.thumbnailList.querySelector(`[data-page="${clamped}"]`);
   if (thumb) thumb.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+  // Scroll canvas area to top on page change
+  DOM.canvasArea.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function prevPage() { goToPage(State.currentPage - 1); }
@@ -1091,7 +1099,7 @@ function showContextMenu(e, pageNum) {
 
     // Insert blank page
     if (action === 'insert-blank') {
-      showLoading();
+      showLoading('Inserting page…');
       try {
         const newBytes = await insertBlankPage(State.pdfBytes, idx);
         State.currentPage = pageNum + 1; // navigate to the new blank page
@@ -1124,7 +1132,7 @@ function showContextMenu(e, pageNum) {
 
     // Duplicate page via pdf-lib
     if (action === 'duplicate') {
-      showLoading();
+      showLoading('Duplicating page…');
       try {
         const PDFLib = window.PDFLib;
         const doc = await PDFLib.PDFDocument.load(State.pdfBytes, { ignoreEncryption: true });
@@ -1143,7 +1151,7 @@ function showContextMenu(e, pageNum) {
       return;
     }
 
-    showLoading();
+    showLoading('Editing page…');
     try {
       let newBytes;
       switch (action) {
@@ -1348,7 +1356,7 @@ function renderMergeFileList() {
 
 async function executeMerge() {
   if (mergeFiles.length < 2) return;
-  showLoading();
+  showLoading('Merging PDFs…');
   try {
     const fileList = mergeFiles.map(f => ({ bytes: f.bytes }));
     const mergedBytes = await mergePDFs(fileList);
@@ -1410,7 +1418,7 @@ async function executeSplit() {
   const ranges = parsePageRanges(input, State.totalPages);
   if (!ranges) return;
 
-  showLoading();
+  showLoading('Splitting PDF…');
   try {
     const results = await splitPDF(State.pdfBytes, ranges);
     closeSplitModal();
@@ -1454,7 +1462,7 @@ function updateStatusBar() {
 async function handlePrint() {
   if (!State.pdfDoc) return;
 
-  showLoading();
+  showLoading('Preparing to print…');
   try {
     // Save current page annotations before printing
     savePageAnnotations(State.currentPage);
@@ -1530,7 +1538,7 @@ async function handlePrint() {
   } catch (err) {
     console.error('Print failed:', err);
     hideLoading();
-    showToast('Print failed: ' + err.message, 'error');
+    toast('Print failed: ' + err.message, 'error');
   }
 }
 
@@ -1538,7 +1546,7 @@ async function handlePrint() {
 
 async function handleExport() {
   if (!State.pdfBytes) return;
-  showLoading();
+  showLoading('Exporting PDF…');
   try {
     // Write form field values into the source bytes before export
     let exportBytes = State.pdfBytes;
@@ -1585,7 +1593,7 @@ async function executeWatermark() {
   const text = $('watermark-text').value.trim();
   if (!text) { toast('Enter watermark text', 'warning'); return; }
 
-  showLoading();
+  showLoading('Applying watermark…');
   try {
     const newBytes = await addWatermark(State.pdfBytes, {
       text,
@@ -1659,7 +1667,7 @@ async function executeBates() {
     }
   }
 
-  showLoading();
+  showLoading('Applying Bates numbers…');
   try {
     const { bytes, firstLabel, lastLabel } = await applyBatesNumbers(State.pdfBytes, {
       prefix: $('bates-prefix').value,
@@ -1778,7 +1786,7 @@ async function executeHeadersFooters() {
     return;
   }
 
-  showLoading();
+  showLoading('Applying headers & footers…');
   try {
     const bytes = await applyHeadersFooters(State.pdfBytes, {
       topLeft: $('hf-top-left').value,
@@ -1997,7 +2005,7 @@ async function executeCrop() {
 
   const scope = $('crop-scope').value;
 
-  showLoading();
+  showLoading('Cropping pages…');
   try {
     const bytes = await cropPages(State.pdfBytes, {
       top, bottom, left, right,
@@ -2061,7 +2069,7 @@ function readFileAsDataUrl(file) {
  */
 async function handleAddPages(files, insertAfter) {
   if (!State.pdfBytes || !files.length) return;
-  showLoading();
+  showLoading('Adding pages…');
   try {
     const additions = [];
     let totalNewPages = 0;
@@ -2237,6 +2245,260 @@ function refreshNotesSidebar() {
   // Update badge count
   const badge = document.querySelector('.sidebar-tab[data-sidebar="notes"] .sidebar-tab-label');
   if (badge) badge.dataset.count = notes.length;
+}
+
+/* ═══════════════════ Modal Focus Trapping ═══════════════════ */
+
+let _focusTrapCleanup = null;
+let _previousFocus = null;
+
+function trapFocus(modalEl) {
+  _previousFocus = document.activeElement;
+  const focusable = modalEl.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]):not([hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  );
+  if (focusable.length === 0) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  // Focus the first element
+  setTimeout(() => first.focus(), 50);
+
+  const onKeyDown = (e) => {
+    if (e.key !== 'Tab') return;
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  };
+
+  modalEl.addEventListener('keydown', onKeyDown);
+  _focusTrapCleanup = () => {
+    modalEl.removeEventListener('keydown', onKeyDown);
+  };
+}
+
+function releaseFocus() {
+  if (_focusTrapCleanup) {
+    _focusTrapCleanup();
+    _focusTrapCleanup = null;
+  }
+  if (_previousFocus && _previousFocus.focus) {
+    _previousFocus.focus();
+    _previousFocus = null;
+  }
+}
+
+/* ═══════════════════ Offline Indicator ═══════════════════ */
+
+function initOfflineIndicator() {
+  const badge = $('status-offline');
+  if (!badge) return;
+
+  const update = () => {
+    if (navigator.onLine) {
+      badge.classList.add('hidden');
+    } else {
+      badge.classList.remove('hidden');
+    }
+  };
+
+  update();
+  window.addEventListener('online', () => {
+    update();
+    toast('Back online', 'success', 2000);
+  });
+  window.addEventListener('offline', () => {
+    update();
+    toast('You are offline — your work is safe locally', 'warning', 4000);
+  });
+}
+
+/* ═══════════════════ Unsaved Changes Indicator ═══════════════════ */
+
+function updateUnsavedIndicator() {
+  const dot = $('status-unsaved');
+  if (!dot) return;
+  const hasUnsaved = State.pdfBytes && hasAnnotations && hasAnnotations();
+  dot.classList.toggle('hidden', !hasUnsaved);
+}
+
+function initModalFocusTrapping() {
+  // Observe all modal backdrops for visibility changes
+  document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+    const observer = new MutationObserver(() => {
+      if (!backdrop.classList.contains('hidden')) {
+        const modal = backdrop.querySelector('.modal, .modal-panel');
+        if (modal) trapFocus(modal);
+      } else {
+        releaseFocus();
+      }
+    });
+    observer.observe(backdrop, { attributes: true, attributeFilter: ['class'] });
+  });
+}
+
+/* ═══════════════════ Title Bar Dropdown Menus ═══════════════════ */
+
+let _activeDropdown = null;
+
+function closeDropdown() {
+  if (_activeDropdown) {
+    _activeDropdown.remove();
+    _activeDropdown = null;
+  }
+  document.querySelectorAll('.menu-item.active').forEach(el => el.classList.remove('active'));
+}
+
+function openDropdown(menuBtn, items) {
+  closeDropdown();
+  hideContextMenu();
+
+  menuBtn.classList.add('active');
+  const rect = menuBtn.getBoundingClientRect();
+  const menu = document.createElement('div');
+  menu.className = 'dropdown-menu';
+
+  for (const item of items) {
+    if (item === '---') {
+      const sep = document.createElement('div');
+      sep.className = 'dropdown-menu-separator';
+      menu.appendChild(sep);
+      continue;
+    }
+    const btn = document.createElement('button');
+    const needsDoc = item.needsDoc !== false;
+    btn.disabled = needsDoc && !State.pdfBytes;
+    btn.innerHTML = `${icon(item.icon, 14)}<span>${item.label}</span>${item.shortcut ? `<span class="shortcut-hint">${item.shortcut}</span>` : ''}`;
+    btn.addEventListener('click', () => {
+      closeDropdown();
+      item.action();
+    });
+    menu.appendChild(btn);
+  }
+
+  menu.style.left = rect.left + 'px';
+  menu.style.top = rect.bottom + 'px';
+  document.body.appendChild(menu);
+
+  // Keep menu within viewport
+  const menuRect = menu.getBoundingClientRect();
+  if (menuRect.right > window.innerWidth) {
+    menu.style.left = (window.innerWidth - menuRect.width - 8) + 'px';
+  }
+
+  _activeDropdown = menu;
+
+  // Close on click outside
+  const onOutsideClick = (e) => {
+    if (!menu.contains(e.target) && !e.target.closest('.menu-item')) {
+      closeDropdown();
+      document.removeEventListener('mousedown', onOutsideClick);
+    }
+  };
+  setTimeout(() => document.addEventListener('mousedown', onOutsideClick), 0);
+
+  // Close on Escape
+  const onKey = (e) => {
+    if (e.key === 'Escape') {
+      closeDropdown();
+      document.removeEventListener('keydown', onKey);
+    }
+  };
+  document.addEventListener('keydown', onKey);
+}
+
+function getMenuDefinitions() {
+  return {
+    'File': [
+      { icon: 'folder-open', label: 'Open', shortcut: 'Ctrl+O', needsDoc: false, action: () => DOM.fileInput.click() },
+      { icon: 'save', label: 'Export', shortcut: 'Ctrl+S', action: handleExport },
+      { icon: 'printer', label: 'Print', shortcut: 'Ctrl+P', action: handlePrint },
+      '---',
+      { icon: 'download', label: 'Export as Image', action: () => $('btn-export-image').click() },
+    ],
+    'Edit': [
+      { icon: 'undo', label: 'Undo', shortcut: 'Ctrl+Z', action: handleUndo },
+      { icon: 'redo', label: 'Redo', shortcut: 'Ctrl+Y', action: handleRedo },
+      '---',
+      { icon: 'search', label: 'Find', shortcut: 'Ctrl+F', action: openFindBar },
+      { icon: 'trash', label: 'Delete Selection', shortcut: 'Del', action: deleteSelected },
+    ],
+    'View': [
+      { icon: 'zoom-in', label: 'Zoom In', shortcut: '+', action: zoomIn },
+      { icon: 'zoom-out', label: 'Zoom Out', shortcut: '−', action: zoomOut },
+      { icon: 'columns', label: 'Fit Width', action: fitWidth },
+      { icon: 'maximize', label: 'Fit Page', action: fitPage },
+      '---',
+      { icon: 'panel-left-open', label: 'Toggle Sidebar', action: toggleSidebar },
+      { icon: 'moon', label: 'Toggle Dark Mode', needsDoc: false, action: toggleDarkMode },
+    ],
+    'Insert': [
+      { icon: 'type', label: 'Text', shortcut: 'T', action: () => setTool('text') },
+      { icon: 'image', label: 'Image', action: handleImageInsert },
+      { icon: 'pen-tool', label: 'Signature', action: () => $('btn-signature').click() },
+      { icon: 'stamp', label: 'Stamp', action: () => setTool('stamp') },
+      { icon: 'droplet', label: 'Watermark', action: openWatermarkModal },
+      '---',
+      { icon: 'file-plus', label: 'Blank Page', action: () => $('btn-insert-blank').click() },
+    ],
+    'Tools': [
+      { icon: 'link', label: 'Merge', action: openMergeModal },
+      { icon: 'scissors', label: 'Split', action: openSplitModal },
+      '---',
+      { icon: 'file-scan', label: 'OCR', action: () => $('btn-ocr').click() },
+      { icon: 'git-compare', label: 'Compare', action: () => $('btn-compare').click() },
+      { icon: 'shrink', label: 'Optimize', action: () => $('btn-optimize').click() },
+      '---',
+      { icon: 'lock', label: 'Encrypt', action: () => $('btn-encrypt').click() },
+      { icon: 'shield-off', label: 'Redact Search', action: () => $('btn-redact-search').click() },
+      { icon: 'eye-off', label: 'Sanitize', action: () => $('btn-sanitize')?.click() },
+    ],
+    'Help': [
+      { icon: 'info', label: 'Keyboard Shortcuts', shortcut: '?', needsDoc: false, action: openShortcutsModal },
+      '---',
+      { icon: 'zap', label: 'About Mudbrick', needsDoc: false, action: openAboutModal },
+    ],
+  };
+}
+
+function openShortcutsModal() {
+  $('shortcuts-modal-backdrop').classList.remove('hidden');
+}
+
+function openAboutModal() {
+  $('about-modal-backdrop').classList.remove('hidden');
+}
+
+function initDropdownMenus() {
+  const defs = getMenuDefinitions();
+  document.querySelectorAll('.menu-item').forEach(btn => {
+    const label = btn.textContent.trim();
+    const items = defs[label];
+    if (!items) return;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (_activeDropdown && btn.classList.contains('active')) {
+        closeDropdown();
+      } else {
+        openDropdown(btn, items);
+      }
+    });
+    // Open on hover when another menu is already open
+    btn.addEventListener('mouseenter', () => {
+      if (_activeDropdown) {
+        openDropdown(btn, items);
+      }
+    });
+  });
 }
 
 /* ═══════════════════ Event Wiring ═══════════════════ */
@@ -2426,6 +2688,8 @@ function wireEvents() {
       if (modal === 'form-data') $('form-data-modal-backdrop').classList.add('hidden');
       if (modal === 'exhibit') $('exhibit-modal-backdrop').classList.add('hidden');
       if (modal === 'sanitize') $('sanitize-modal-backdrop').classList.add('hidden');
+      if (modal === 'shortcuts') $('shortcuts-modal-backdrop').classList.add('hidden');
+      if (modal === 'about') $('about-modal-backdrop').classList.add('hidden');
       if (modal === 'page-labels') {
         $('page-labels-modal-backdrop').classList.add('hidden');
         // Restore previously saved ranges on cancel
@@ -2648,7 +2912,7 @@ function wireEvents() {
   // Edit ribbon — Insert Blank Page
   $('btn-insert-blank').addEventListener('click', async () => {
     if (!State.pdfBytes) return;
-    showLoading();
+    showLoading('Inserting page…');
     try {
       const newBytes = await insertBlankPage(State.pdfBytes, State.currentPage - 1);
       await reloadAfterEdit(newBytes);
@@ -2734,11 +2998,17 @@ function wireEvents() {
     // Also refresh notes sidebar after any annotation modification
     canvas.on('object:modified', () => {
       refreshNotesSidebar();
+      updateUnsavedIndicator();
+    });
+
+    canvas.on('object:added', () => {
+      updateUnsavedIndicator();
     });
 
     canvas.on('object:removed', () => {
       refreshNotesSidebar();
       hideNotePropsPanel();
+      updateUnsavedIndicator();
     });
   }, 500);
 
@@ -3120,7 +3390,7 @@ async function executeEncrypt() {
   const ownerPwd = $('encrypt-owner-pw').value.trim();
   if (!userPwd && !ownerPwd) { toast('Enter at least one password', 'error'); return; }
 
-  showLoading();
+  showLoading('Encrypting PDF…');
   try {
     const permissions = {
       printing: $('perm-print').checked,
@@ -3161,7 +3431,7 @@ async function openMetadataModal() {
 
 async function executeMetadataSave() {
   if (!State.pdfBytes) return;
-  showLoading();
+  showLoading('Saving metadata…');
   try {
     const fields = {
       title: $('meta-title').value,
@@ -3183,7 +3453,7 @@ async function executeMetadataSave() {
 async function executeMetadataRemove() {
   if (!State.pdfBytes) return;
   if (!confirm('Remove all metadata from this document?')) return;
-  showLoading();
+  showLoading('Removing metadata…');
   try {
     const newBytes = await removeMetadata(State.pdfBytes);
     await reloadAfterEdit(newBytes);
@@ -3211,7 +3481,7 @@ async function executeRedactSearch() {
   }
   if (customPattern && !patternNames.includes('custom')) patternNames.push('custom');
 
-  showLoading();
+  showLoading('Searching for redaction patterns…');
   try {
     _redactMatches = await searchPatterns(State.pdfDoc, patternNames, customPattern);
     const container = $('redact-results-list');
@@ -3294,7 +3564,7 @@ async function executeExportImage() {
     pages = rangeInput ? parsePageRanges(rangeInput.value, State.totalPages) : [State.currentPage];
   }
 
-  showLoading();
+  showLoading('Exporting images…');
   try {
     await exportPagesToImages(State.pdfDoc, pages, {
       format, dpi, quality, fileName: State.fileName,
@@ -3328,7 +3598,7 @@ async function executeCreateFromImages() {
   const pageSize = $('images-page-size')?.value || 'fit';
   const margin = parseInt($('images-margin')?.value) || 0;
 
-  showLoading();
+  showLoading('Creating PDF from images…');
   try {
     const pdfBytes = await createPDFFromImages(_imagesToPdf, { pageSize, margin }, (done, total) => {
       $('loading-text').textContent = `Processing image ${done}/${total}...`;
@@ -3350,7 +3620,7 @@ async function executeOptimize() {
   const dpi = parseInt($('optimize-dpi')?.value) || 150;
   const quality = parseFloat($('optimize-quality')?.value) || 0.75;
 
-  showLoading();
+  showLoading('Optimizing PDF…');
   try {
     const originalSize = State.pdfBytes.length;
     const newBytes = await optimizePDF(State.pdfDoc, State.pdfBytes, { dpi, quality }, (done, total) => {
@@ -3391,7 +3661,7 @@ async function executeCompare() {
   const dpi = parseInt($('compare-dpi')?.value) || 96;
   const threshold = parseInt($('compare-threshold')?.value) || 30;
 
-  showLoading();
+  showLoading('Comparing documents…');
   try {
     _compareResults = await compareDocuments(State.pdfDoc, _compareDocB, { dpi, threshold }, (page, total) => {
       $('loading-text').textContent = `Comparing page ${page}/${total}...`;
@@ -3469,7 +3739,7 @@ function downloadCommentSummary() {
 async function executeFlattenAnnotations() {
   if (!State.pdfBytes) return;
   if (!confirm('Flatten all annotations into the PDF permanently? This cannot be undone.')) return;
-  showLoading();
+  showLoading('Flattening annotations…');
   try {
     const result = await flattenAnnotations({
       pdfBytes: State.pdfBytes,
@@ -3522,7 +3792,7 @@ async function showTabOrder() {
 async function executeFormFlatten() {
   if (!State.pdfLibDoc) return;
   if (!confirm('Flatten all form fields? They will become non-editable.')) return;
-  showLoading();
+  showLoading('Flattening form fields…');
   try {
     const newBytes = await flattenFormFields(State.pdfLibDoc);
     await reloadAfterEdit(newBytes);
@@ -3537,7 +3807,7 @@ async function executeFormFlatten() {
 /* ── Form Data Import/Export ── */
 async function executeFormDataImport() {
   if (!State.pdfLibDoc || !_formDataFile) { toast('Select a file to import', 'error'); return; }
-  showLoading();
+  showLoading('Importing form data…');
   try {
     const text = await _formDataFile.text();
     const ext = _formDataFile.name.split('.').pop().toLowerCase();
@@ -3657,7 +3927,7 @@ function openSanitizeModal() {
 
 async function executeSanitize() {
   if (!State.pdfBytes) return;
-  showLoading();
+  showLoading('Sanitizing document…');
   try {
     const result = await sanitizeDocument(State.pdfBytes);
     await reloadAfterEdit(result.bytes);
@@ -3851,7 +4121,7 @@ async function executeReplacePages() {
     return;
   }
 
-  showLoading();
+  showLoading('Replacing pages…');
   try {
     const newBytes = await replacePages(State.pdfBytes, _replaceSourceBytes, mappings);
     await reloadAfterEdit(newBytes);
@@ -3879,6 +4149,14 @@ function handleKeyboard(e) {
   // Don't intercept when typing in inputs, selects, or Fabric IText editing
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
   if (e.target.contentEditable === 'true') return;
+
+  // ? key — show keyboard shortcuts (works without a PDF loaded)
+  if (e.key === '?' && !mod) {
+    e.preventDefault();
+    openShortcutsModal();
+    return;
+  }
+
   if (!State.pdfDoc) return;
 
   // Check if Fabric.js IText is being edited
@@ -4010,6 +4288,13 @@ function selectTool(toolName) {
   State.activeTool = toolName;
   setTool(toolName, { shapeType: 'rect', stampType: 'approved' });
   updatePanelToolTitle();
+  // Update status bar tool indicator
+  const toolLabel = $('status-tool');
+  if (toolLabel) {
+    const names = { select: 'Select', hand: 'Hand', text: 'Text', draw: 'Draw', highlight: 'Highlight', underline: 'Underline', strikethrough: 'Strikethrough', shape: 'Shape', cover: 'Cover', redact: 'Redact', stamp: 'Stamp', 'sticky-note': 'Note' };
+    toolLabel.textContent = 'Tool: ' + (names[toolName] || toolName);
+    toolLabel.classList.remove('hidden');
+  }
   // Show/hide tool properties section based on active tool
   const toolPropsEl = $('panel-tool-props');
   if (toolPropsEl) {
@@ -4042,7 +4327,7 @@ function selectTool(toolName) {
 window.Mudbrick = {
   /** Load a PDF from a URL (useful for testing and link sharing) */
   async loadFromURL(url) {
-    showLoading();
+    showLoading('Loading PDF from URL…');
     try {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
