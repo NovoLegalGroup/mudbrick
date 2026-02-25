@@ -21,7 +21,7 @@ import {
 import {
   resetPdfLib, ensurePdfLib, rotatePage, deletePage,
   reorderPages, mergePDFs, splitPDF, addWatermark, appendPages,
-  insertBlankPage, cropPages, getPageDimensions, replacePages,
+  insertBlankPage, cropPages, replacePages,
 } from './pdf-edit.js';
 
 import {
@@ -1829,17 +1829,28 @@ const cropState = {
 async function openCropModal() {
   if (!State.pdfBytes || cropState.active) return;
 
-  // Get page dimensions
-  const dims = await getPageDimensions(State.pdfBytes, State.currentPage - 1);
-  cropState.pdfW = dims.width;
-  cropState.pdfH = dims.height;
+  // Get effective page dimensions via PDF.js viewport (handles rotation & CropBox)
+  const pdfPage = await State.pdfDoc.getPage(State.currentPage);
+  const vp1 = pdfPage.getViewport({ scale: 1 });
+  cropState.pdfW = vp1.width;
+  cropState.pdfH = vp1.height;
 
-  // Get rendered page size
-  const canvas = DOM.pdfCanvas;
-  cropState.pageW = canvas.clientWidth;
-  cropState.pageH = canvas.clientHeight;
+  // Auto-collapse sidebar on tablet to avoid overlap
+  cropState._sidebarWasOpen = State.sidebarOpen;
+  if (window.innerWidth <= 768 && State.sidebarOpen) {
+    toggleSidebar();
+  }
 
-  // Default crop: inset 10% from each edge
+  // Show overlay first so we can measure it
+  $('crop-overlay').classList.remove('hidden');
+  $('crop-bar').classList.remove('hidden');
+
+  // Use overlay dimensions for coordinate system consistency
+  const overlay = $('crop-overlay');
+  cropState.pageW = overlay.offsetWidth;
+  cropState.pageH = overlay.offsetHeight;
+
+  // Default crop: inset 5% from each edge
   const inset = 0.05;
   cropState.x = Math.round(cropState.pageW * inset);
   cropState.y = Math.round(cropState.pageH * inset);
@@ -1847,9 +1858,6 @@ async function openCropModal() {
   cropState.h = Math.round(cropState.pageH * (1 - 2 * inset));
   cropState.active = true;
 
-  // Show overlay & bar
-  $('crop-overlay').classList.remove('hidden');
-  $('crop-bar').classList.remove('hidden');
   updateCropOverlay();
   updateCropInfo();
 }
@@ -1859,6 +1867,12 @@ function closeCropModal() {
   $('crop-overlay').classList.add('hidden');
   $('crop-bar').classList.add('hidden');
   $('crop-modal-backdrop').classList.add('hidden');
+
+  // Restore sidebar if it was open before crop
+  if (cropState._sidebarWasOpen && !State.sidebarOpen) {
+    toggleSidebar();
+  }
+  cropState._sidebarWasOpen = false;
 }
 
 function updateCropOverlay() {
@@ -1928,31 +1942,30 @@ function setCropFromPreset(topPt, bottomPt, leftPt, rightPt) {
 
 function initCropDragHandlers() {
   const overlay = $('crop-overlay');
-  const sel = overlay.querySelector('.crop-selection');
   let dragMode = null; // 'move' | handle name
   let startMX = 0, startMY = 0;
   let startRect = {};
 
-  overlay.addEventListener('mousedown', e => {
-    if (!cropState.active) return;
-    const handle = e.target.closest('.crop-handle');
+  function beginDrag(target, clientX, clientY) {
+    if (!cropState.active) return false;
+    const handle = target.closest('.crop-handle');
     if (handle) {
       dragMode = handle.dataset.handle;
-    } else if (e.target.closest('.crop-selection')) {
+    } else if (target.closest('.crop-selection')) {
       dragMode = 'move';
     } else {
-      return;
+      return false;
     }
-    startMX = e.clientX;
-    startMY = e.clientY;
+    startMX = clientX;
+    startMY = clientY;
     startRect = { x: cropState.x, y: cropState.y, w: cropState.w, h: cropState.h };
-    e.preventDefault();
-  });
+    return true;
+  }
 
-  document.addEventListener('mousemove', e => {
+  function applyDrag(clientX, clientY) {
     if (!dragMode || !cropState.active) return;
-    const dx = e.clientX - startMX;
-    const dy = e.clientY - startMY;
+    const dx = clientX - startMX;
+    const dy = clientY - startMY;
     const { pageW, pageH } = cropState;
     const MIN = 20;
 
@@ -1983,11 +1996,31 @@ function initCropDragHandlers() {
     cropState.h = h;
     updateCropOverlay();
     updateCropInfo();
-  });
+  }
 
-  document.addEventListener('mouseup', () => {
+  function endDrag() {
     dragMode = null;
+  }
+
+  // Mouse events
+  overlay.addEventListener('mousedown', e => {
+    if (beginDrag(e.target, e.clientX, e.clientY)) e.preventDefault();
   });
+  document.addEventListener('mousemove', e => applyDrag(e.clientX, e.clientY));
+  document.addEventListener('mouseup', endDrag);
+
+  // Touch events
+  overlay.addEventListener('touchstart', e => {
+    const t = e.touches[0];
+    if (beginDrag(e.target, t.clientX, t.clientY)) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('touchmove', e => {
+    if (!dragMode) return;
+    const t = e.touches[0];
+    applyDrag(t.clientX, t.clientY);
+    e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('touchend', endDrag);
 }
 
 async function executeCrop() {

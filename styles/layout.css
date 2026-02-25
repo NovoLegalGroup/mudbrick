@@ -1995,7 +1995,7 @@ html, body {
 .crop-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  z-index: 50;
+  z-index: 100;
   pointer-events: auto;
 }
 
@@ -2048,7 +2048,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
-  z-index: 60;
+  z-index: 110;
   font-size: 13px;
 }
 .crop-bar-info {
