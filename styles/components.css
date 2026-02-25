@@ -663,7 +663,7 @@ button:disabled {
   box-shadow: var(--mb-shadow-md);
   padding: 4px 0;
   min-width: 160px;
-  z-index: 1050;
+  z-index: 1150;
 }
 
 .context-menu button {
@@ -1148,4 +1148,91 @@ html[data-theme="dark"] .exhibit-preview-text {
   .modal-header h2 {
     font-size: 16px;
   }
+}
+
+/* ── JS-generated HTML classes (extracted from inline styles) ── */
+
+/* Redact match list items */
+.redact-match-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--mb-border);
+}
+.redact-match-text {
+  font-size: 12px;
+}
+
+/* Images-to-PDF file list */
+.image-file-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--mb-border);
+}
+.image-file-name {
+  font-size: 12px;
+}
+.image-file-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--mb-danger);
+  font-size: 16px;
+  padding: 2px 4px;
+}
+
+/* Page label range rows */
+.label-range-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--mb-surface-alt);
+  border-radius: var(--mb-radius-sm);
+  font-size: 12px;
+}
+.label-range-input {
+  width: 52px;
+  padding: 4px;
+}
+.label-range-select {
+  padding: 4px;
+}
+.label-range-prefix {
+  width: 52px;
+  padding: 4px;
+}
+.label-range-startlabel {
+  font-size: 11px;
+}
+.label-range-startnum {
+  width: 44px;
+  padding: 4px;
+}
+.label-range-remove {
+  background: none;
+  border: none;
+  color: var(--mb-text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 4px;
+}
+
+/* Page label preview tags */
+.label-preview-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  margin: 2px;
+  background: var(--mb-surface);
+  border: 1px solid var(--mb-border);
+  border-radius: 3px;
+  font-size: 12px;
+}
+.label-preview-more {
+  font-size: 12px;
+  color: var(--mb-text-muted);
+  margin-left: 4px;
 }

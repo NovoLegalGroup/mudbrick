@@ -327,8 +327,8 @@ html, body {
 }
 
 .titlebar-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -675,8 +675,8 @@ html, body {
 }
 
 .bookmark-toggle {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -853,7 +853,7 @@ html, body {
   position: absolute;
   top: 8px;
   right: 16px;
-  z-index: 20;
+  z-index: 75;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -897,8 +897,8 @@ html, body {
 }
 
 .find-nav-btn {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -937,8 +937,8 @@ html, body {
 }
 
 .find-close-btn {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1039,7 +1039,7 @@ html, body {
   top: 140px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 1000;
+  z-index: 200;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1097,8 +1097,8 @@ html, body {
 }
 
 .text-edit-btn {
-  width: 28px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1330,8 +1330,8 @@ html, body {
 }
 
 .panel-close {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1527,8 +1527,8 @@ html, body {
 }
 
 .page-nav-btn {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1649,8 +1649,8 @@ html, body {
 }
 
 #status-bar .zoom-btn {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1709,8 +1709,7 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  z-index: 900;
-  backdrop-filter: blur(2px);
+  z-index: 1050;
   animation: fadeIn 150ms ease;
 }
 
@@ -1837,14 +1836,14 @@ html, body {
   }
 
   .page-nav-btn {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
   }
 
   .find-nav-btn,
   .find-close-btn {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
   }
 }
 
@@ -2066,4 +2065,53 @@ html, body {
   background: var(--mb-surface);
   font-size: 12px;
   color: var(--mb-text);
+}
+
+/* ── Focus-visible States ── */
+
+.sidebar-collapse:focus-visible,
+.find-nav-btn:focus-visible,
+.find-close-btn:focus-visible,
+.image-edit-btn:focus-visible,
+#status-bar .zoom-btn:focus-visible,
+.bookmark-toggle:focus-visible,
+.panel-close:focus-visible,
+.page-nav-btn:focus-visible,
+.titlebar-btn:focus-visible,
+.text-edit-btn:focus-visible {
+  outline: 2px solid var(--mb-accent);
+  outline-offset: 2px;
+}
+
+/* ── Dark Mode Overrides ── */
+
+html[data-theme="dark"] .text-edit-line {
+  background: rgba(30, 30, 30, 0.95);
+  color: var(--mb-text);
+}
+html[data-theme="dark"] .text-edit-line:hover {
+  background: rgba(40, 40, 40, 0.97);
+}
+html[data-theme="dark"] .text-edit-line:focus {
+  background: var(--mb-surface);
+}
+
+html[data-theme="dark"] .image-edit-btn {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+html[data-theme="dark"] .crop-shade {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+/* ── Reduced Motion ── */
+
+@media (prefers-reduced-motion: reduce) {
+  #welcome-screen *,
+  #loading-overlay,
+  .spinner,
+  .loading-text {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

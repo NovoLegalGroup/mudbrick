@@ -33,6 +33,7 @@ import {
   duplicateSelected, copySelected, pasteClipboard,
   lockSelected, unlockSelected, isSelectionLocked,
   getAllStickyNotes, updateSelectedNoteText, setOnStickyNoteSelected,
+  addAnnotationToPage,
 } from './annotations.js';
 
 import { exportAnnotatedPDF } from './export.js';
@@ -199,8 +200,6 @@ async function boot() {
 
     // Offline detection
     initOfflineIndicator();
-
-    console.log('Mudbrick ready');
   } catch (e) {
     console.error('Boot failed:', e);
     toast('Failed to initialize PDF engine. Please refresh.', 'error');
@@ -2733,6 +2732,14 @@ function wireEvents() {
     });
   });
 
+  // Close modal on backdrop click (click on the overlay, not the dialog content)
+  document.addEventListener('click', e => {
+    if (e.target.classList.contains('modal-backdrop') && !e.target.classList.contains('hidden')) {
+      const closeBtn = e.target.querySelector('[data-close-modal]');
+      if (closeBtn) closeBtn.click();
+    }
+  });
+
   // Annotation tool buttons (sync active state across all ribbon panels)
   document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -3524,9 +3531,9 @@ async function executeRedactSearch() {
       $('btn-redact-apply').classList.add('hidden');
     } else {
       container.innerHTML = _redactMatches.map((m, i) =>
-        `<label style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border);">
+        `<label class="redact-match-label">
           <input type="checkbox" checked data-redact-idx="${i}">
-          <span style="font-size:12px;"><strong>Page ${m.pageNum}</strong> — ${escapeHtml(m.text)} <em>(${m.pattern})</em></span>
+          <span class="redact-match-text"><strong>Page ${m.pageNum}</strong> — ${escapeHtml(m.text)} <em>(${m.pattern})</em></span>
         </label>`
       ).join('');
       $('btn-redact-apply').classList.remove('hidden');
@@ -3550,23 +3557,24 @@ function executeRedactApply() {
     const idx = parseInt(cb.dataset.redactIdx);
     const match = _redactMatches[idx];
     if (!match) continue;
-    // Create redaction rects via annotations on the matching page
+    // Create redaction rects on the matching page
     for (const rect of match.rects) {
-      // Save current page, switch to target page, add rect, switch back
-      savePageAnnotations(State.currentPage);
-      // We add a Fabric rect for each match rect
+      const rectProps = {
+        type: 'rect',
+        left: rect.x,
+        top: rect.y,
+        width: rect.width,
+        height: rect.height,
+        fill: '#000000',
+        opacity: 1,
+        selectable: true,
+        mudbrickType: 'redact',
+      };
       if (match.pageNum === State.currentPage) {
-        const fabricRect = new window.fabric.Rect({
-          left: rect.x,
-          top: rect.y,
-          width: rect.width,
-          height: rect.height,
-          fill: '#000000',
-          opacity: 1,
-          selectable: true,
-          mudbrickType: 'redact',
-        });
-        canvas.add(fabricRect);
+        canvas.add(new window.fabric.Rect(rectProps));
+      } else {
+        // Add directly to the page's annotation store
+        addAnnotationToPage(match.pageNum, rectProps);
       }
       applied++;
     }
@@ -3618,9 +3626,9 @@ function addImagesToList(files) {
   _imagesToPdf.push(...files);
   const list = $('images-file-list');
   list.innerHTML = _imagesToPdf.map((f, i) =>
-    `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">
-      <span style="font-size:12px;">${escapeHtml(f.name)} (${formatFileSize(f.size)})</span>
-      <button onclick="this.parentElement.remove(); window._removeImageFromPdf(${i})" style="background:none;border:none;cursor:pointer;color:var(--danger);">&times;</button>
+    `<div class="image-file-row">
+      <span class="image-file-name">${escapeHtml(f.name)} (${formatFileSize(f.size)})</span>
+      <button onclick="this.parentElement.remove(); window._removeImageFromPdf(${i})" class="image-file-remove">&times;</button>
     </div>`
   ).join('');
 }
@@ -4021,17 +4029,16 @@ function addLabelRangeRow(evt, prefill) {
   const row = document.createElement('div');
   row.className = 'label-range-row';
   row.dataset.rangeIdx = idx;
-  row.style.cssText = 'display:flex;gap:6px;align-items:center;padding:6px 8px;background:var(--mb-surface-secondary);border-radius:var(--mb-radius-sm);font-size:12px;';
   row.innerHTML = `
     <label style="min-width:40px;">Pages</label>
-    <input type="number" class="label-start" value="${startVal}" min="1" max="${State.totalPages}" style="width:52px;padding:4px;">
+    <input type="number" class="label-start label-range-input" value="${startVal}" min="1" max="${State.totalPages}">
     <span>–</span>
-    <input type="number" class="label-end" value="${endVal}" min="1" max="${State.totalPages}" style="width:52px;padding:4px;">
-    <select class="label-format" style="padding:4px;">${fmtOptions}</select>
-    <input type="text" class="label-prefix" value="${escapeHtml(prefixVal)}" placeholder="Prefix" style="width:52px;padding:4px;">
-    <label style="font-size:11px;">Start#</label>
-    <input type="number" class="label-startnum" value="${startNumVal}" min="1" style="width:44px;padding:4px;">
-    <button class="btn-remove-range" title="Remove" style="background:none;border:none;color:var(--mb-text-muted);cursor:pointer;font-size:16px;padding:2px 4px;">&times;</button>
+    <input type="number" class="label-end label-range-input" value="${endVal}" min="1" max="${State.totalPages}">
+    <select class="label-format label-range-select">${fmtOptions}</select>
+    <input type="text" class="label-prefix label-range-prefix" value="${escapeHtml(prefixVal)}" placeholder="Prefix">
+    <label class="label-range-startlabel">Start#</label>
+    <input type="number" class="label-startnum label-range-startnum" value="${startNumVal}" min="1">
+    <button class="btn-remove-range label-range-remove" title="Remove">&times;</button>
   `;
 
   row.querySelector('.btn-remove-range').addEventListener('click', () => {
@@ -4064,13 +4071,13 @@ function updateLabelsPreview() {
   const preview = previewLabels(Math.min(State.totalPages, 20));
   const container = $('page-labels-preview');
   container.innerHTML = preview.map(p =>
-    `<span style="display:inline-block;padding:2px 6px;margin:2px;background:var(--mb-surface);border:1px solid var(--mb-border);border-radius:3px;font-size:12px;">
+    `<span class="label-preview-tag">
       <strong>${p.page}</strong>→${escapeHtml(p.label)}
     </span>`
   ).join('');
 
   if (State.totalPages > 20) {
-    container.innerHTML += `<span style="font-size:12px;color:var(--mb-text-muted);margin-left:4px">...and ${State.totalPages - 20} more</span>`;
+    container.innerHTML += `<span class="label-preview-more">...and ${State.totalPages - 20} more</span>`;
   }
 }
 
@@ -4228,15 +4235,22 @@ function handleKeyboard(e) {
       deleteSelected();
       break;
 
-    // Escape: close find bar → deselect → switch to select tool
-    case e.key === 'Escape':
-      if (isFindOpen()) {
+    // Escape: close modal → close crop → close find bar → deselect → switch to select tool
+    case e.key === 'Escape': {
+      const openBackdrop = document.querySelector('.modal-backdrop:not(.hidden)');
+      if (openBackdrop) {
+        const closeBtn = openBackdrop.querySelector('[data-close-modal]');
+        if (closeBtn) closeBtn.click();
+      } else if (cropState.active) {
+        closeCropModal();
+      } else if (isFindOpen()) {
         closeFindBar();
       } else {
         if (canvas) canvas.discardActiveObject().renderAll();
         selectTool('select');
       }
       break;
+    }
 
     // Tool shortcuts (only when not editing text)
     case e.key === 'v' && !mod && !isEditingText:
