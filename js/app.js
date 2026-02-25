@@ -3243,12 +3243,27 @@ function wireEvents() {
 
   $('btn-optimize').addEventListener('click', () => {
     $('optimize-result').textContent = '';
+    $('optimize-result').classList.add('hidden');
     $('optimize-modal-backdrop').classList.remove('hidden');
   });
   $('btn-optimize-execute').addEventListener('click', executeOptimize);
   $('optimize-quality')?.addEventListener('input', (e) => {
     const display = $('optimize-quality-val');
     if (display) display.textContent = e.target.value + '%';
+  });
+  // Show/hide custom options based on preset
+  $('optimize-preset')?.addEventListener('change', (e) => {
+    const customOpts = $('optimize-custom-opts');
+    if (customOpts) customOpts.classList.toggle('hidden', e.target.value !== 'custom');
+  });
+  // Update hint text when mode changes
+  $('optimize-mode')?.addEventListener('change', (e) => {
+    const hint = $('optimize-mode-hint');
+    if (hint) {
+      hint.textContent = e.target.value === 'smart'
+        ? 'Smart mode preserves text, links, and fonts on text-only pages. Only image-heavy pages are recompressed.'
+        : 'Aggressive mode rasterizes all pages as JPEG. Text will become non-selectable.';
+    }
   });
 
   $('btn-compare').addEventListener('click', () => {
@@ -3658,21 +3673,43 @@ async function executeCreateFromImages() {
 /* ── Optimize PDF ── */
 async function executeOptimize() {
   if (!State.pdfDoc || !State.pdfBytes) return;
-  const dpi = parseInt($('optimize-dpi')?.value) || 150;
-  const quality = parseFloat($('optimize-quality')?.value) || 0.75;
 
-  showLoading('Optimizing PDF…');
+  const mode = $('optimize-mode')?.value || 'smart';
+  const preset = $('optimize-preset')?.value || 'ebook';
+
+  // For custom preset, read DPI and quality from the controls
+  const dpi = preset === 'custom' ? (parseInt($('optimize-dpi')?.value) || 150) : undefined;
+  const quality = preset === 'custom' ? ((parseFloat($('optimize-quality')?.value) || 75) / 100) : undefined;
+
+  showLoading('Analyzing pages…');
   try {
     const originalSize = State.pdfBytes.length;
-    const newBytes = await optimizePDF(State.pdfDoc, State.pdfBytes, { dpi, quality }, (done, total) => {
-      $('loading-text').textContent = `Optimizing page ${done}/${total}...`;
+    const opts = { mode };
+    if (preset === 'custom') {
+      opts.dpi = dpi;
+      opts.quality = quality;
+    } else {
+      opts.preset = preset;
+    }
+
+    const newBytes = await optimizePDF(State.pdfDoc, State.pdfBytes, opts, (done, total, label) => {
+      $('loading-text').textContent = `${label === 'compressing' ? 'Compressing' : 'Copying'} page ${done}/${total}…`;
     });
+
     const saved = originalSize - newBytes.length;
     const pct = ((saved / originalSize) * 100).toFixed(1);
-    $('optimize-result').textContent = `Original: ${formatFileSize(originalSize)} → Optimized: ${formatFileSize(newBytes.length)} (${pct}% smaller)`;
+    const stats = newBytes._optimizeStats || {};
+    let resultText = `Original: ${formatFileSize(originalSize)} → Optimized: ${formatFileSize(newBytes.length)} (${pct}% ${saved > 0 ? 'smaller' : 'larger'})`;
+    if (mode === 'smart' && stats.preserved > 0) {
+      resultText += `\n${stats.preserved} text page${stats.preserved > 1 ? 's' : ''} preserved, ${stats.rasterized} image page${stats.rasterized > 1 ? 's' : ''} compressed`;
+    }
+
+    const resultEl = $('optimize-result');
+    resultEl.textContent = resultText;
+    resultEl.classList.remove('hidden');
 
     await reloadAfterEdit(newBytes);
-    toast(`Optimized — saved ${formatFileSize(saved)} (${pct}%)`, 'success');
+    toast(`Optimized — saved ${formatFileSize(Math.max(0, saved))} (${pct}%)`, saved > 0 ? 'success' : 'info');
   } catch (err) {
     toast('Optimization failed: ' + err.message, 'error');
   } finally {

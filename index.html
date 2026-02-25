@@ -1457,16 +1457,34 @@
         <button class="modal-close" data-close-modal="optimize">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="modal-form-hint">
-          Reduce file size by re-rendering pages as compressed images. Text will be rasterized (lossy).
-        </p>
         <div class="modal-form-grid">
+          <div>
+            <label class="bates-label">Mode</label>
+            <select id="optimize-mode" class="bates-field">
+              <option value="smart" selected>Smart — preserve text, compress images</option>
+              <option value="aggressive">Aggressive — rasterize all pages</option>
+            </select>
+          </div>
+          <div>
+            <label class="bates-label">Preset</label>
+            <select id="optimize-preset" class="bates-field">
+              <option value="screen">Screen (72 DPI, smaller file)</option>
+              <option value="ebook" selected>eBook (150 DPI, balanced)</option>
+              <option value="print">Print (200 DPI, higher quality)</option>
+              <option value="prepress">Prepress (300 DPI, max quality)</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+        </div>
+        <div id="optimize-custom-opts" class="modal-form-grid hidden mt-8">
           <div>
             <label class="bates-label">DPI</label>
             <select id="optimize-dpi" class="bates-field">
-              <option value="72">72 (Smallest)</option>
-              <option value="150" selected>150 (Balanced)</option>
-              <option value="300">300 (Quality)</option>
+              <option value="72">72</option>
+              <option value="100">100</option>
+              <option value="150" selected>150</option>
+              <option value="200">200</option>
+              <option value="300">300</option>
             </select>
           </div>
           <div>
@@ -1475,6 +1493,9 @@
             <span id="optimize-quality-val" class="range-value-label">75%</span>
           </div>
         </div>
+        <p id="optimize-mode-hint" class="modal-form-hint mt-8">
+          Smart mode preserves text, links, and fonts on text-only pages. Only image-heavy pages are recompressed.
+        </p>
         <div id="optimize-result" class="hidden modal-preview-box mt-16 modal-text-sm"></div>
       </div>
       <div class="modal-footer">
