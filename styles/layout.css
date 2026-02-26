@@ -863,6 +863,7 @@ html, body {
   box-shadow: var(--mb-shadow-md);
   padding: 6px 10px;
   font-size: 13px;
+  max-width: calc(100vw - 32px);
 }
 
 .find-bar.hidden {
@@ -1019,7 +1020,7 @@ html, body {
   min-width: 20px;
   box-sizing: border-box;
   /* font-family is set inline from PDF font detection */
-  color: #000;
+  color: var(--mb-text);
   border-radius: 2px;
   transition: outline-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
@@ -1112,6 +1113,10 @@ html, body {
   color: var(--mb-text);
   cursor: pointer;
   min-width: 60px;
+}
+.text-edit-toolbar select:focus {
+  border-color: var(--mb-accent);
+  outline: none;
 }
 .text-edit-toolbar .text-edit-font-family {
   min-width: 140px;
@@ -1442,7 +1447,7 @@ html, body {
   transition: all var(--mb-transition);
 }
 .color-swatch:hover { transform: scale(1.15); box-shadow: var(--mb-shadow-sm); }
-.color-swatch.active { border-color: var(--mb-text); box-shadow: 0 0 0 1px white, var(--mb-shadow-sm); }
+.color-swatch.active { border-color: var(--mb-text); box-shadow: 0 0 0 1px var(--mb-surface), 0 0 0 2px var(--mb-text); }
 
 /* Slider */
 .prop-slider {
@@ -1483,6 +1488,12 @@ html, body {
   color: var(--mb-text);
   font-family: inherit;
   cursor: pointer;
+}
+
+.prop-select:focus {
+  border-color: var(--mb-accent);
+  box-shadow: 0 0 0 2px rgba(41,128,185,0.15);
+  outline: none;
 }
 
 /* Annotation List */

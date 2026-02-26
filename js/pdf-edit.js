@@ -35,7 +35,8 @@ export async function saveToBytes() {
 export async function rotatePage(pdfBytes, pageIndex, degrees) {
   const doc = await ensurePdfLib(pdfBytes);
   const page = doc.getPage(pageIndex);
-  const current = page.getRotation().angle;
+  const rot = page.getRotation();
+  const current = (rot && typeof rot.angle === 'number') ? rot.angle : 0;
   page.setRotation(getPDFLib().degrees((current + degrees) % 360));
   return doc.save();
 }

@@ -152,6 +152,11 @@ button:disabled {
   color: var(--mb-text);
 }
 
+.modal-close:focus-visible {
+  outline: 2px solid var(--mb-accent);
+  outline-offset: 2px;
+}
+
 .modal-body {
   padding: 20px;
 }
@@ -407,7 +412,7 @@ button:disabled {
   border: 1px solid var(--mb-border);
   border-radius: var(--mb-radius-sm);
   overflow: hidden;
-  background: #fff;
+  background: var(--mb-surface);
 }
 
 .sig-type-field {
@@ -1147,6 +1152,15 @@ html[data-theme="dark"] .exhibit-preview-text {
 
   .modal-header h2 {
     font-size: 16px;
+  }
+
+  .modal-form-grid,
+  .modal-form-grid-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 

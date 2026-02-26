@@ -882,8 +882,11 @@ export async function commitTextEdits(pdfBytes, pageNum) {
     let variant = fontName;
     if (bold) variant += '-Bold';
     if (italic) variant += '-Italic';
-    const stdName = mapToStandardFont(variant);
+    let stdName = mapToStandardFont(variant);
     if (!fontCache[stdName]) {
+      if (!PDFLib.StandardFonts[stdName]) {
+        stdName = 'Helvetica'; // safe fallback
+      }
       fontCache[stdName] = await doc.embedFont(PDFLib.StandardFonts[stdName]);
     }
     return fontCache[stdName];
@@ -941,6 +944,7 @@ export async function commitTextEdits(pdfBytes, pageNum) {
  */
 async function extractImagePositions(page, viewport) {
   const ops = await page.getOperatorList();
+  if (!window.pdfjsLib) return [];
   const OPS = window.pdfjsLib.OPS;
   const images = [];
 

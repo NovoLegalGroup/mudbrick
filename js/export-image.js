@@ -545,6 +545,7 @@ async function convertToJpeg(file) {
       ctx.drawImage(img, 0, 0);
       canvas.toBlob(blob => {
         URL.revokeObjectURL(url);
+        if (!blob) { reject(new Error('Canvas toBlob returned null')); return; }
         blob.arrayBuffer().then(buf => resolve(new Uint8Array(buf)));
       }, 'image/jpeg', 0.92);
     };

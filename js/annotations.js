@@ -209,12 +209,14 @@ function markHighlightPath(e) {
 
 function markUnderlinePath(e) {
   if (e.path) {
+    e.path.set({ selectable: false, evented: false });
     e.path.mudbrickType = 'underline';
   }
 }
 
 function markStrikethroughPath(e) {
   if (e.path) {
+    e.path.set({ selectable: false, evented: false });
     e.path.mudbrickType = 'strikethrough';
   }
 }
@@ -546,6 +548,9 @@ function addStickyNote(x, y) {
   fabricCanvas.setActiveObject(group);
   fabricCanvas.renderAll();
 
+  // Make the note immediately selectable
+  group.set({ selectable: true, evented: true });
+
   // Notify listeners (properties panel) that a new sticky note was placed
   if (typeof onStickyNoteSelected === 'function') {
     onStickyNoteSelected(group);
@@ -622,6 +627,10 @@ function addStamp(x, y) {
     angle: -15,
     mudbrickType: 'stamp',
   });
+
+  // Ensure text dimensions are computed before sizing the rect
+  text.set({ left: 0, top: 0 });
+  text.initDimensions();
 
   // Add border rect around stamp
   const padding = 8 * currentZoom;
@@ -758,6 +767,10 @@ export function updateToolOptions(opts) {
       fabricCanvas.freeDrawingBrush.width = toolOptions.strokeWidth * currentZoom;
     } else if (currentTool === 'highlight') {
       fabricCanvas.freeDrawingBrush.color = hexToRgba(toolOptions.highlightColor, 0.35);
+    } else if (currentTool === 'underline' || currentTool === 'strikethrough') {
+      if (opts.color) {
+        fabricCanvas.freeDrawingBrush.color = opts.color;
+      }
     }
   }
 }
