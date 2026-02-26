@@ -33,6 +33,14 @@ let currentPdfDoc = null;
 
 let _focusedLine = null; // currently focused text-edit-line div
 
+// Undo/redo stacks — stores snapshots per line
+let undoStack = []; // array of { div, text, dataset snapshot }
+let redoStack = [];
+const MAX_UNDO = 50;
+
+// Custom embedded font (uploaded by user)
+let customFont = null; // { name, bytes, fontObj: null (set during commit) }
+
 // Image edit state
 let imageActive = false;
 let imageContainer = null;
@@ -112,6 +120,149 @@ const FONT_FAMILIES = [
   { label: 'Serif (Times)', css: '"Times New Roman", Times, serif', pdf: 'TimesRoman' },
   { label: 'Monospace (Courier)', css: '"Courier New", Courier, monospace', pdf: 'Courier' },
 ];
+
+/* ═══════════════════ Undo / Redo ═══════════════════ */
+
+/** Capture a snapshot of a line's current state for undo */
+function captureSnapshot(div) {
+  return {
+    div,
+    text: div.textContent,
+    bold: div.dataset.bold,
+    italic: div.dataset.italic,
+    fontSizeOverride: div.dataset.fontSizeOverride,
+    colorOverride: div.dataset.colorOverride,
+    fontFamilyOverride: div.dataset.fontFamilyOverride,
+    fontNameOverride: div.dataset.fontNameOverride || '',
+    fontWeight: div.style.fontWeight,
+    fontStyle: div.style.fontStyle,
+    fontSize: div.style.fontSize,
+    fontFamily: div.style.fontFamily,
+    color: div.style.color,
+  };
+}
+
+/** Restore a snapshot to a line */
+function restoreSnapshot(snap) {
+  const div = snap.div;
+  div.textContent = snap.text;
+  div.dataset.bold = snap.bold;
+  div.dataset.italic = snap.italic;
+  div.dataset.fontSizeOverride = snap.fontSizeOverride;
+  div.dataset.colorOverride = snap.colorOverride;
+  div.dataset.fontFamilyOverride = snap.fontFamilyOverride;
+  div.dataset.fontNameOverride = snap.fontNameOverride;
+  div.style.fontWeight = snap.fontWeight;
+  div.style.fontStyle = snap.fontStyle;
+  div.style.fontSize = snap.fontSize;
+  div.style.fontFamily = snap.fontFamily;
+  div.style.color = snap.color;
+  markDirty(div);
+}
+
+/** Push current state of a line to undo stack before a change */
+function pushUndo(div) {
+  undoStack.push(captureSnapshot(div));
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack = []; // clear redo on new action
+  updateUndoButtons();
+}
+
+function performUndo() {
+  if (undoStack.length === 0) return;
+  const snap = undoStack.pop();
+  redoStack.push(captureSnapshot(snap.div));
+  restoreSnapshot(snap);
+  updateUndoButtons();
+}
+
+function performRedo() {
+  if (redoStack.length === 0) return;
+  const snap = redoStack.pop();
+  undoStack.push(captureSnapshot(snap.div));
+  restoreSnapshot(snap);
+  updateUndoButtons();
+}
+
+function updateUndoButtons() {
+  if (!toolbar) return;
+  const undoBtn = toolbar.querySelector('.text-edit-undo');
+  const redoBtn = toolbar.querySelector('.text-edit-redo');
+  if (undoBtn) undoBtn.disabled = undoStack.length === 0;
+  if (redoBtn) redoBtn.disabled = redoStack.length === 0;
+}
+
+/* ═══════════════════ Keyboard Shortcuts for Text Edit ═══════════════════ */
+
+/**
+ * Handle keyboard shortcuts while in text edit mode.
+ * This runs on the container so it catches events from contenteditable divs
+ * (which the main app.js handler skips).
+ */
+function handleTextEditKeydown(e) {
+  if (!active) return;
+  const mod = e.ctrlKey || e.metaKey;
+
+  // Ctrl+B — toggle bold
+  if (mod && e.key === 'b') {
+    e.preventDefault();
+    e.stopPropagation();
+    applyToFocused(div => {
+      pushUndo(div);
+      const isBold = div.style.fontWeight === 'bold';
+      div.style.fontWeight = isBold ? 'normal' : 'bold';
+      div.dataset.bold = isBold ? '' : 'true';
+      if (toolbar) toolbar.querySelector('.text-edit-bold')?.classList.toggle('active', !isBold);
+    });
+    return;
+  }
+
+  // Ctrl+I — toggle italic
+  if (mod && e.key === 'i') {
+    e.preventDefault();
+    e.stopPropagation();
+    applyToFocused(div => {
+      pushUndo(div);
+      const isItalic = div.style.fontStyle === 'italic';
+      div.style.fontStyle = isItalic ? 'normal' : 'italic';
+      div.dataset.italic = isItalic ? '' : 'true';
+      if (toolbar) toolbar.querySelector('.text-edit-italic')?.classList.toggle('active', !isItalic);
+    });
+    return;
+  }
+
+  // Ctrl+Z — undo (within text edit)
+  if (mod && e.key === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    performUndo();
+    return;
+  }
+
+  // Ctrl+Shift+Z or Ctrl+Y — redo
+  if (mod && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+    e.preventDefault();
+    e.stopPropagation();
+    performRedo();
+    return;
+  }
+
+  // Enter in text edit — commit edits
+  if (mod && e.key === 'Enter') {
+    e.preventDefault();
+    e.stopPropagation();
+    toolbar?.querySelector('.text-edit-commit')?.click();
+    return;
+  }
+
+  // Escape — cancel text edit
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+    toolbar?.querySelector('.text-edit-cancel')?.click();
+    return;
+  }
+}
 
 /* ═══════════════════ Text Grouping ═══════════════════ */
 
@@ -202,6 +353,44 @@ function transformFallback(viewport, t) {
   ];
 }
 
+/* ═══════════════════ Paragraph Grouping ═══════════════════ */
+
+/**
+ * Group lines into paragraphs based on vertical proximity and left-alignment.
+ * Lines that are close together vertically (within 1.8x line height) and share
+ * similar left positions are grouped as a paragraph.
+ *
+ * @param {Array} lines - Output from groupIntoLines
+ * @returns {Array<Array>} Array of paragraph arrays, each containing lines
+ */
+function groupIntoParagraphs(lines) {
+  if (lines.length <= 1) return lines.map(l => [l]);
+
+  const paragraphs = [];
+  let currentPara = [lines[0]];
+
+  for (let i = 1; i < lines.length; i++) {
+    const prev = lines[i - 1];
+    const curr = lines[i];
+
+    const verticalGap = curr.top - (prev.top + prev.height);
+    const lineSpacing = prev.height * 1.8;
+    const leftAligned = Math.abs(curr.left - prev.left) < prev.height * 2;
+    const sameFont = curr.fontName === prev.fontName;
+    const sameSize = Math.abs(curr.fontSize - prev.fontSize) < 2;
+
+    if (verticalGap < lineSpacing && leftAligned && sameFont && sameSize) {
+      currentPara.push(curr);
+    } else {
+      paragraphs.push(currentPara);
+      currentPara = [curr];
+    }
+  }
+  paragraphs.push(currentPara);
+
+  return paragraphs;
+}
+
 /* ═══════════════════ Enter / Exit Text Edit ═══════════════════ */
 
 export async function enterTextEditMode(pageNum, pdfDoc, viewport, container) {
@@ -248,64 +437,110 @@ export async function enterTextEditMode(pageNum, pdfDoc, viewport, container) {
   currentPageNum = pageNum;
   currentPdfDoc = pdfDoc;
 
+  // Reset undo/redo
+  undoStack = [];
+  redoStack = [];
+
   // Hide existing text layer spans
   container.querySelectorAll('span').forEach(s => s.style.visibility = 'hidden');
 
-  // Create editable overlays for each line
-  for (const line of lines) {
-    const div = document.createElement('div');
-    div.className = 'text-edit-line';
-    div.contentEditable = 'true';
-    div.spellcheck = false;
-    div.textContent = line.text;
+  // Group lines into paragraphs for visual grouping
+  const paragraphs = groupIntoParagraphs(lines);
 
-    // Position & size
-    div.style.left = line.left + 'px';
-    div.style.top = line.top + 'px';
-    div.style.minWidth = line.width + 'px';
-    div.style.height = line.height + 'px';
-    div.style.fontSize = line.fontSize + 'px';
-    div.style.lineHeight = line.height + 'px';
+  // Create editable overlays for each line, wrapped in paragraph groups
+  for (const para of paragraphs) {
+    // Create paragraph wrapper (visual grouping indicator)
+    let paraWrapper = null;
+    if (para.length > 1) {
+      paraWrapper = document.createElement('div');
+      paraWrapper.className = 'text-edit-paragraph';
+      const paraTop = Math.min(...para.map(l => l.top));
+      const paraBottom = Math.max(...para.map(l => l.top + l.height));
+      const paraLeft = Math.min(...para.map(l => l.left));
+      paraWrapper.style.position = 'absolute';
+      paraWrapper.style.left = (paraLeft - 3) + 'px';
+      paraWrapper.style.top = (paraTop - 2) + 'px';
+      paraWrapper.style.width = '3px';
+      paraWrapper.style.height = (paraBottom - paraTop + 4) + 'px';
+      paraWrapper.style.pointerEvents = 'none';
+      container.appendChild(paraWrapper);
+    }
 
-    // Match PDF font visually
-    const cssFont = mapToCSSFont(line.fontName);
-    const fontStyle = detectFontStyle(line.fontName);
-    div.style.fontFamily = cssFont;
-    if (fontStyle.bold) div.style.fontWeight = 'bold';
-    if (fontStyle.italic) div.style.fontStyle = 'italic';
+    for (const line of para) {
+      const div = document.createElement('div');
+      div.className = 'text-edit-line';
+      div.contentEditable = 'true';
+      div.spellcheck = false;
+      div.textContent = line.text;
 
-    // Store original data
-    div.dataset.original = line.text;
-    div.dataset.pdfX = line.pdfX;
-    div.dataset.pdfY = line.pdfY;
-    div.dataset.pdfFontSize = line.pdfFontSize;
-    div.dataset.pdfLineWidth = line.pdfLineWidth || '';
-    div.dataset.fontName = line.fontName || '';
-    div.dataset.cssFont = cssFont;
-    div.dataset.width = line.width;
-    div.dataset.height = line.height;
+      // Position & size
+      div.style.left = line.left + 'px';
+      div.style.top = line.top + 'px';
+      div.style.minWidth = line.width + 'px';
+      div.style.height = line.height + 'px';
+      div.style.fontSize = line.fontSize + 'px';
+      div.style.lineHeight = line.height + 'px';
 
-    // Track formatting changes per line
-    div.dataset.fontSizeOverride = '';
-    div.dataset.colorOverride = '';
-    div.dataset.fontFamilyOverride = '';
-    div.dataset.bold = fontStyle.bold ? 'true' : '';
-    div.dataset.italic = fontStyle.italic ? 'true' : '';
+      // Match PDF font visually
+      const cssFont = mapToCSSFont(line.fontName);
+      const fontStyle = detectFontStyle(line.fontName);
+      div.style.fontFamily = cssFont;
+      if (fontStyle.bold) div.style.fontWeight = 'bold';
+      if (fontStyle.italic) div.style.fontStyle = 'italic';
 
-    // Track changes for live preview indicator
-    div.addEventListener('input', () => markDirty(div));
-    div.addEventListener('focus', () => {
-      _focusedLine = div;
-      updateToolbarState(div);
-    });
-    div.addEventListener('blur', () => {
-      if (_focusedLine === div) _focusedLine = null;
-    });
+      // Store original data
+      div.dataset.original = line.text;
+      div.dataset.pdfX = line.pdfX;
+      div.dataset.pdfY = line.pdfY;
+      div.dataset.pdfFontSize = line.pdfFontSize;
+      div.dataset.pdfLineWidth = line.pdfLineWidth || '';
+      div.dataset.fontName = line.fontName || '';
+      div.dataset.cssFont = cssFont;
+      div.dataset.width = line.width;
+      div.dataset.height = line.height;
+      div.dataset.paraId = para.length > 1 ? paragraphs.indexOf(para).toString() : '';
 
-    container.appendChild(div);
+      // Track formatting changes per line
+      div.dataset.fontSizeOverride = '';
+      div.dataset.colorOverride = '';
+      div.dataset.fontFamilyOverride = '';
+      div.dataset.fontNameOverride = '';
+      div.dataset.bold = fontStyle.bold ? 'true' : '';
+      div.dataset.italic = fontStyle.italic ? 'true' : '';
+
+      // Undo snapshot on first input per focus session
+      let snapshotTaken = false;
+      div.addEventListener('focus', () => {
+        snapshotTaken = false;
+        _focusedLine = div;
+        updateToolbarState(div);
+      });
+      div.addEventListener('input', () => {
+        if (!snapshotTaken) {
+          // Push undo snapshot using the original text (before this input session)
+          const snap = captureSnapshot(div);
+          snap.text = div.dataset._lastText || div.dataset.original;
+          undoStack.push(snap);
+          if (undoStack.length > MAX_UNDO) undoStack.shift();
+          redoStack = [];
+          updateUndoButtons();
+          snapshotTaken = true;
+        }
+        div.dataset._lastText = div.textContent;
+        markDirty(div);
+      });
+      div.addEventListener('blur', () => {
+        if (_focusedLine === div) _focusedLine = null;
+      });
+
+      container.appendChild(div);
+    }
   }
 
   _focusedLine = null;
+
+  // Register keyboard handler for text edit shortcuts
+  container.addEventListener('keydown', handleTextEditKeydown, true);
 
   // Create enhanced floating toolbar
   createToolbar(container);
@@ -318,7 +553,9 @@ export function exitTextEditMode() {
   active = false;
 
   if (editContainer) {
+    editContainer.removeEventListener('keydown', handleTextEditKeydown, true);
     editContainer.querySelectorAll('.text-edit-line').forEach(el => el.remove());
+    editContainer.querySelectorAll('.text-edit-paragraph').forEach(el => el.remove());
     editContainer.querySelectorAll('span').forEach(s => s.style.visibility = '');
   }
 
@@ -332,6 +569,8 @@ export function exitTextEditMode() {
   currentPageNum = 0;
   currentPdfDoc = null;
   _focusedLine = null;
+  undoStack = [];
+  redoStack = [];
 }
 
 export function isTextEditActive() {
@@ -351,11 +590,18 @@ function createToolbar(container) {
     `<option value="${f.css}" data-pdf="${f.pdf}">${f.label}</option>`
   ).join('');
 
+  // Include custom font option if one is loaded
+  const customFontOption = customFont
+    ? `<option value="custom" data-pdf="custom">${customFont.name}</option>`
+    : '';
+
   toolbar.innerHTML = `
     <div class="text-edit-toolbar-group">
       <select class="text-edit-font-family" title="Font family">
         <option value="">Font</option>
         ${fontFamilyOptions}
+        ${customFontOption}
+        <option value="__upload" data-pdf="">Upload font…</option>
       </select>
       <select class="text-edit-font-size" title="Font size">
         <option value="">Size</option>
@@ -387,12 +633,17 @@ function createToolbar(container) {
     </div>
     <div class="text-edit-toolbar-sep"></div>
     <div class="text-edit-toolbar-group">
+      <button class="text-edit-btn text-edit-undo" title="Undo (Ctrl+Z)" disabled>↶</button>
+      <button class="text-edit-btn text-edit-redo" title="Redo (Ctrl+Y)" disabled>↷</button>
+    </div>
+    <div class="text-edit-toolbar-sep"></div>
+    <div class="text-edit-toolbar-group">
       <span class="text-edit-info">Click text to edit</span>
     </div>
     <div class="text-edit-toolbar-spacer"></div>
     <div class="text-edit-toolbar-group text-edit-actions">
-      <button class="text-edit-commit" title="Apply changes to PDF">Apply</button>
-      <button class="text-edit-cancel" title="Cancel editing">Cancel</button>
+      <button class="text-edit-commit" title="Apply changes (Ctrl+Enter)">Apply</button>
+      <button class="text-edit-cancel" title="Cancel (Esc)">Cancel</button>
     </div>
   `;
 
@@ -400,12 +651,26 @@ function createToolbar(container) {
   const fontFamilySelect = toolbar.querySelector('.text-edit-font-family');
   fontFamilySelect.addEventListener('change', () => {
     const val = fontFamilySelect.value;
-    if (val) applyToFocused(div => {
-      div.style.fontFamily = val;
-      div.dataset.fontFamilyOverride = val;
-      // Store the pdf-lib font name for commit
-      const opt = fontFamilySelect.selectedOptions[0];
-      div.dataset.fontNameOverride = opt?.dataset.pdf || '';
+
+    // Handle "Upload font…" action
+    if (val === '__upload') {
+      fontFamilySelect.value = ''; // reset selector
+      handleFontUpload(fontFamilySelect);
+      return;
+    }
+
+    if (val && val !== '__upload') applyToFocused(div => {
+      pushUndo(div);
+      if (val === 'custom' && customFont) {
+        div.style.fontFamily = `"${customFont.name}", sans-serif`;
+        div.dataset.fontFamilyOverride = 'custom';
+        div.dataset.fontNameOverride = 'custom';
+      } else {
+        div.style.fontFamily = val;
+        div.dataset.fontFamilyOverride = val;
+        const opt = fontFamilySelect.selectedOptions[0];
+        div.dataset.fontNameOverride = opt?.dataset.pdf || '';
+      }
     });
   });
 
@@ -414,6 +679,7 @@ function createToolbar(container) {
   fontSizeSelect.addEventListener('change', () => {
     const val = fontSizeSelect.value;
     if (val) applyToFocused(div => {
+      pushUndo(div);
       div.style.fontSize = val + 'px';
       div.dataset.fontSizeOverride = val;
     });
@@ -421,6 +687,7 @@ function createToolbar(container) {
 
   toolbar.querySelector('.text-edit-bold').addEventListener('click', () => {
     applyToFocused(div => {
+      pushUndo(div);
       const isBold = div.style.fontWeight === 'bold';
       div.style.fontWeight = isBold ? 'normal' : 'bold';
       div.dataset.bold = isBold ? '' : 'true';
@@ -430,6 +697,7 @@ function createToolbar(container) {
 
   toolbar.querySelector('.text-edit-italic').addEventListener('click', () => {
     applyToFocused(div => {
+      pushUndo(div);
       const isItalic = div.style.fontStyle === 'italic';
       div.style.fontStyle = isItalic ? 'normal' : 'italic';
       div.dataset.italic = isItalic ? '' : 'true';
@@ -439,13 +707,68 @@ function createToolbar(container) {
 
   toolbar.querySelector('.text-edit-color').addEventListener('input', (e) => {
     applyToFocused(div => {
+      pushUndo(div);
       div.style.color = e.target.value;
       div.dataset.colorOverride = e.target.value;
     });
   });
 
+  // Undo / Redo buttons
+  toolbar.querySelector('.text-edit-undo').addEventListener('click', performUndo);
+  toolbar.querySelector('.text-edit-redo').addEventListener('click', performRedo);
+  updateUndoButtons();
+
   const parent = container.parentElement || container;
   parent.appendChild(toolbar);
+}
+
+/* ═══════════════════ Custom Font Upload ═══════════════════ */
+
+/**
+ * Handle uploading a custom TTF/OTF font for text editing.
+ * The font is registered via CSS @font-face and stored for pdf-lib embedding at commit time.
+ */
+async function handleFontUpload(fontFamilySelect) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.ttf,.otf,.woff,.woff2';
+  input.onchange = async () => {
+    if (!input.files.length) return;
+    const file = input.files[0];
+    const name = file.name.replace(/\.(ttf|otf|woff2?)$/i, '');
+
+    try {
+      const bytes = await readFileAsBytes(file);
+
+      // Register with CSS @font-face so overlays can use it
+      const blob = new Blob([bytes], { type: 'font/' + (file.name.endsWith('.otf') ? 'otf' : 'truetype') });
+      const fontUrl = URL.createObjectURL(blob);
+      const fontFace = new FontFace(name, `url(${fontUrl})`);
+      await fontFace.load();
+      document.fonts.add(fontFace);
+
+      // Store for pdf-lib embedding during commit
+      customFont = { name, bytes, fontObj: null };
+
+      // Add option to selector and select it
+      const opt = document.createElement('option');
+      opt.value = 'custom';
+      opt.dataset.pdf = 'custom';
+      opt.textContent = name;
+      // Remove previous custom option if any
+      const existing = fontFamilySelect.querySelector('option[value="custom"]');
+      if (existing) existing.remove();
+      // Insert before the "Upload font…" option
+      const uploadOpt = fontFamilySelect.querySelector('option[value="__upload"]');
+      fontFamilySelect.insertBefore(opt, uploadOpt);
+      fontFamilySelect.value = 'custom';
+      fontFamilySelect.dispatchEvent(new Event('change'));
+    } catch (err) {
+      console.warn('Font upload failed:', err);
+      import('./utils.js').then(m => m.toast('Failed to load font: ' + err.message, 'error'));
+    }
+  };
+  input.click();
 }
 
 /** Mark a line as changed for live preview indication */
@@ -547,6 +870,14 @@ export async function commitTextEdits(pdfBytes, pageNum) {
 
   const fontCache = {};
   async function getFont(fontName, bold, italic) {
+    // Custom font embedding
+    if (fontName === 'custom' && customFont) {
+      if (!fontCache['__custom']) {
+        fontCache['__custom'] = await doc.embedFont(customFont.bytes);
+      }
+      return fontCache['__custom'];
+    }
+
     // Build font variant name
     let variant = fontName;
     if (bold) variant += '-Bold';

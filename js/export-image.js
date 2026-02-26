@@ -271,6 +271,11 @@ export async function optimizePDF(pdfDoc, pdfBytes, opts = {}, onProgress) {
   const quality = preset ? preset.quality : (opts.quality || 0.75);
   const mode = opts.mode || 'smart';
 
+  // "images" mode: recompress individual images in-place without rasterizing pages
+  if (mode === 'images') {
+    return recompressImages(pdfDoc, pdfBytes, quality, onProgress);
+  }
+
   const pageCount = pdfDoc.numPages;
   const sourceDoc = await PDFLib.PDFDocument.load(pdfBytes, { ignoreEncryption: true });
   const newDoc = await PDFLib.PDFDocument.create();
@@ -334,6 +339,170 @@ export async function optimizePDF(pdfDoc, pdfBytes, opts = {}, onProgress) {
   // Attach stats to the result for reporting
   result._optimizeStats = { rasterized, preserved, pageCount };
   return result;
+}
+
+/**
+ * Recompress individual embedded images within a PDF without rasterizing pages.
+ * Preserves all text, vectors, fonts, links, and page structure.
+ * Renders each image to a canvas and recompresses as JPEG at the given quality.
+ *
+ * @param {Object} pdfDoc - PDF.js document (for rendering individual images)
+ * @param {Uint8Array} pdfBytes - Original PDF bytes
+ * @param {number} quality - JPEG quality 0-1
+ * @param {Function} [onProgress] - Progress callback
+ * @returns {Promise<Uint8Array>} Optimized PDF bytes
+ */
+async function recompressImages(pdfDoc, pdfBytes, quality, onProgress) {
+  const PDFLib = getPDFLib();
+  const doc = await PDFLib.PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+
+  // Walk all indirect objects to find image XObjects
+  const enumeratedObjects = doc.context.enumerateIndirectObjects();
+  const imageRefs = [];
+
+  for (const [ref, obj] of enumeratedObjects) {
+    // Check if it's a stream with /Subtype /Image
+    if (obj.constructor.name === 'PDFRawStream' || obj.constructor.name === 'PDFStream') {
+      const dict = obj.dict || obj;
+      if (!dict || typeof dict.get !== 'function') continue;
+      const subtype = dict.get(PDFLib.PDFName.of('Subtype'));
+      if (subtype && subtype.toString() === '/Image') {
+        const width = dict.get(PDFLib.PDFName.of('Width'));
+        const height = dict.get(PDFLib.PDFName.of('Height'));
+        const filter = dict.get(PDFLib.PDFName.of('Filter'));
+        const w = width ? (typeof width.value === 'function' ? width.value() : width.numberValue ?? 0) : 0;
+        const h = height ? (typeof height.value === 'function' ? height.value() : height.numberValue ?? 0) : 0;
+
+        // Skip tiny images (icons, masks) and already-JPEG images at small sizes
+        if (w < 32 || h < 32) continue;
+
+        // Skip if already DCT (JPEG) compressed and small — only recompress large ones
+        const filterStr = filter ? filter.toString() : '';
+        const isJpeg = filterStr.includes('DCTDecode');
+
+        imageRefs.push({ ref, obj, w, h, isJpeg });
+      }
+    }
+  }
+
+  let recompressed = 0;
+  const total = imageRefs.length;
+
+  for (let i = 0; i < imageRefs.length; i++) {
+    const imgInfo = imageRefs[i];
+    onProgress?.(i + 1, total, 'recompressing images');
+
+    try {
+      // Extract raw image data from the PDF stream
+      let rawBytes;
+      if (imgInfo.obj.contents) {
+        rawBytes = imgInfo.obj.contents;
+      } else if (imgInfo.obj.getContents) {
+        rawBytes = imgInfo.obj.getContents();
+      } else {
+        continue; // can't read this stream
+      }
+
+      // Decode to pixels via canvas
+      let imageData;
+      if (imgInfo.isJpeg) {
+        // JPEG: decode via Image element
+        const blob = new Blob([rawBytes], { type: 'image/jpeg' });
+        imageData = await decodeImageBlob(blob, imgInfo.w, imgInfo.h);
+      } else {
+        // For other formats, try to render via a blob and Image element
+        // This handles FlateDecode PNG-like images
+        try {
+          const blob = new Blob([rawBytes], { type: 'image/png' });
+          imageData = await decodeImageBlob(blob, imgInfo.w, imgInfo.h);
+        } catch {
+          continue; // skip images we can't decode
+        }
+      }
+
+      if (!imageData) continue;
+
+      // Recompress as JPEG
+      const canvas = document.createElement('canvas');
+      canvas.width = imgInfo.w;
+      canvas.height = imgInfo.h;
+      const ctx = canvas.getContext('2d');
+      ctx.putImageData(imageData, 0, 0);
+
+      const jpegBlob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', quality));
+      const jpegBytes = new Uint8Array(await jpegBlob.arrayBuffer());
+
+      // Only replace if the JPEG is actually smaller
+      if (jpegBytes.length < rawBytes.length) {
+        // Create a new JPEG image stream and replace the old one
+        const newImage = doc.context.flateStream(jpegBytes, {
+          [PDFLib.PDFName.of('Type').toString()]: PDFLib.PDFName.of('XObject'),
+          [PDFLib.PDFName.of('Subtype').toString()]: PDFLib.PDFName.of('Image'),
+          [PDFLib.PDFName.of('Width').toString()]: PDFLib.PDFNumber.of(imgInfo.w),
+          [PDFLib.PDFName.of('Height').toString()]: PDFLib.PDFNumber.of(imgInfo.h),
+          [PDFLib.PDFName.of('ColorSpace').toString()]: PDFLib.PDFName.of('DeviceRGB'),
+          [PDFLib.PDFName.of('BitsPerComponent').toString()]: PDFLib.PDFNumber.of(8),
+          [PDFLib.PDFName.of('Filter').toString()]: PDFLib.PDFName.of('DCTDecode'),
+          [PDFLib.PDFName.of('Length').toString()]: PDFLib.PDFNumber.of(jpegBytes.length),
+        });
+
+        // Use embedJpg approach instead — re-embed and swap the reference
+        const embeddedImage = await doc.embedJpg(jpegBytes);
+        const embeddedRef = embeddedImage.ref;
+        if (embeddedRef) {
+          // Copy the new image's stream object to replace the old one
+          const embeddedObj = doc.context.lookup(embeddedRef);
+          if (embeddedObj) {
+            doc.context.assign(imgInfo.ref, embeddedObj);
+            recompressed++;
+          }
+        }
+      }
+
+      // Release canvas memory
+      canvas.width = canvas.height = 0;
+    } catch (e) {
+      // Skip images that fail — don't break the whole optimization
+      console.warn('Image recompress failed:', e);
+    }
+  }
+
+  const result = await doc.save();
+  result._optimizeStats = {
+    rasterized: 0,
+    preserved: doc.getPageCount(),
+    pageCount: doc.getPageCount(),
+    imagesRecompressed: recompressed,
+    imagesFound: total,
+  };
+  return result;
+}
+
+/**
+ * Decode an image blob to ImageData via an off-screen canvas.
+ * Used by recompressImages to convert raw PDF image bytes to pixels.
+ */
+async function decodeImageBlob(blob, expectedW, expectedH) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || expectedW;
+      canvas.height = img.naturalHeight || expectedH;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      canvas.width = canvas.height = 0;
+      resolve(imageData);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Image decode failed'));
+    };
+    img.src = url;
+  });
 }
 
 /* ═══════════════════ Helpers ═══════════════════ */

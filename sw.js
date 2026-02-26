@@ -4,7 +4,7 @@
  * cache-first for local assets.
  */
 
-const CACHE_VERSION = 'mudbrick-v3.1';
+const CACHE_VERSION = 'mudbrick-v3.2';
 
 /* App shell — local assets */
 const SHELL_ASSETS = [

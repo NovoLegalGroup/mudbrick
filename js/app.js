@@ -3260,9 +3260,21 @@ function wireEvents() {
   $('optimize-mode')?.addEventListener('change', (e) => {
     const hint = $('optimize-mode-hint');
     if (hint) {
-      hint.textContent = e.target.value === 'smart'
-        ? 'Smart mode preserves text, links, and fonts on text-only pages. Only image-heavy pages are recompressed.'
-        : 'Aggressive mode rasterizes all pages as JPEG. Text will become non-selectable.';
+      const hints = {
+        smart: 'Smart mode preserves text, links, and fonts on text-only pages. Only image-heavy pages are recompressed.',
+        images: 'Images Only mode recompresses individual embedded images without rasterizing pages. All text, fonts, links, and vectors are preserved.',
+        aggressive: 'Aggressive mode rasterizes all pages as JPEG. Text will become non-selectable.',
+      };
+      hint.textContent = hints[e.target.value] || hints.smart;
+    }
+    // Hide DPI for images-only mode (it doesn't use DPI)
+    const dpiRow = $('optimize-custom-opts');
+    const presetRow = $('optimize-preset')?.parentElement;
+    if (e.target.value === 'images') {
+      if (presetRow) presetRow.style.display = 'none';
+      if (dpiRow) dpiRow.classList.add('hidden');
+    } else {
+      if (presetRow) presetRow.style.display = '';
     }
   });
 
@@ -3693,7 +3705,11 @@ async function executeOptimize() {
     }
 
     const newBytes = await optimizePDF(State.pdfDoc, State.pdfBytes, opts, (done, total, label) => {
-      $('loading-text').textContent = `${label === 'compressing' ? 'Compressing' : 'Copying'} page ${done}/${total}…`;
+      if (label === 'recompressing images') {
+        $('loading-text').textContent = `Recompressing image ${done}/${total}…`;
+      } else {
+        $('loading-text').textContent = `${label === 'compressing' ? 'Compressing' : 'Copying'} page ${done}/${total}…`;
+      }
     });
 
     const saved = originalSize - newBytes.length;
@@ -3702,6 +3718,9 @@ async function executeOptimize() {
     let resultText = `Original: ${formatFileSize(originalSize)} → Optimized: ${formatFileSize(newBytes.length)} (${pct}% ${saved > 0 ? 'smaller' : 'larger'})`;
     if (mode === 'smart' && stats.preserved > 0) {
       resultText += `\n${stats.preserved} text page${stats.preserved > 1 ? 's' : ''} preserved, ${stats.rasterized} image page${stats.rasterized > 1 ? 's' : ''} compressed`;
+    }
+    if (mode === 'images' && stats.imagesFound > 0) {
+      resultText += `\n${stats.imagesRecompressed}/${stats.imagesFound} images recompressed. All text and vectors preserved.`;
     }
 
     const resultEl = $('optimize-result');
