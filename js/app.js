@@ -613,7 +613,7 @@ function fitWidth() {
     const container = DOM.canvasArea;
     const newZoom = calculateFitWidth(viewport.width, container.clientWidth);
     setZoom(newZoom);
-  });
+  }).catch(() => {});
 }
 
 function fitPage() {
@@ -626,7 +626,7 @@ function fitPage() {
       container.clientWidth, container.clientHeight
     );
     setZoom(newZoom);
-  });
+  }).catch(() => {});
 }
 
 function updateZoomDisplay() {
@@ -813,7 +813,7 @@ function handleEditText() {
   enterTextEditMode(State.currentPage, State.pdfDoc, State._viewport, DOM.textLayer)
     .then(ok => {
       if (ok) DOM.btnEditText.classList.add('active');
-    });
+    }).catch(err => console.warn('Text edit failed:', err));
 }
 
 async function handleCommitTextEdits() {
@@ -854,7 +854,7 @@ function handleEditImage() {
   enterImageEditMode(State.currentPage, State.pdfDoc, State._viewport, DOM.textLayer)
     .then(ok => {
       if (ok) DOM.btnEditImage.classList.add('active');
-    });
+    }).catch(err => console.warn('Image edit failed:', err));
 }
 
 async function handleCommitImageEdits() {
@@ -3250,7 +3250,7 @@ function wireEvents() {
   $('btn-create-from-images').addEventListener('click', () => {
     $('create-from-images-modal-backdrop').classList.remove('hidden');
     _imagesToPdf = [];
-    $('images-file-list').innerHTML = '<p style="color:var(--text-secondary)">No images added yet.</p>';
+    $('images-file-list').innerHTML = '<p style="color:var(--mb-text-secondary)">No images added yet.</p>';
   });
   $('btn-create-from-images-execute').addEventListener('click', executeCreateFromImages);
 
@@ -4500,4 +4500,4 @@ boot().then(() => {
   if (pdfUrl) {
     window.Mudbrick.loadFromURL(pdfUrl);
   }
-});
+}).catch(e => console.error('Boot failed:', e));

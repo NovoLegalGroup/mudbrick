@@ -24,6 +24,10 @@
  *   isImageEditActive()
  */
 
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 let active = false;
 let editContainer = null;
 let toolbar = null;
@@ -598,7 +602,7 @@ function createToolbar(container) {
 
   // Include custom font option if one is loaded
   const customFontOption = customFont
-    ? `<option value="custom" data-pdf="custom">${customFont.name}</option>`
+    ? `<option value="custom" data-pdf="custom">${escapeHtml(customFont.name)}</option>`
     : '';
 
   toolbar.innerHTML = `
@@ -752,6 +756,7 @@ async function handleFontUpload(fontFamilySelect) {
       const fontFace = new FontFace(name, `url(${fontUrl})`);
       await fontFace.load();
       document.fonts.add(fontFace);
+      URL.revokeObjectURL(fontUrl);
 
       // Store for pdf-lib embedding during commit
       customFont = { name, bytes, fontObj: null };

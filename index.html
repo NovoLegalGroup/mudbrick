@@ -830,7 +830,7 @@
     <div class="modal">
       <div class="modal-header">
         <h2>Merge PDFs</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="merge">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="merge">&times;</button>
       </div>
       <div class="modal-body">
         <div id="merge-drop-zone" class="modal-drop-zone modal-form-section">
@@ -851,7 +851,7 @@
     <div class="modal">
       <div class="modal-header">
         <h2>Split PDF</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="split">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="split">&times;</button>
       </div>
       <div class="modal-body">
         <p class="modal-form-hint">
@@ -873,39 +873,39 @@
     <div class="modal">
       <div class="modal-header">
         <h2>Add Watermark</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="watermark">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="watermark">&times;</button>
       </div>
       <div class="modal-body">
         <div class="modal-form-stack">
           <div>
-            <label class="modal-form-label">Text</label>
+            <label class="modal-form-label" for="watermark-text">Text</label>
             <input type="text" id="watermark-text" value="CONFIDENTIAL" class="modal-form-input"
               placeholder="Watermark text">
           </div>
           <div class="modal-form-grid">
             <div>
-              <label class="modal-form-label">Font Size</label>
+              <label class="modal-form-label" for="watermark-size">Font Size</label>
               <input type="number" id="watermark-size" value="60" min="10" max="200" class="modal-form-input">
             </div>
             <div>
-              <label class="modal-form-label">Rotation (&deg;)</label>
+              <label class="modal-form-label" for="watermark-rotation">Rotation (&deg;)</label>
               <input type="number" id="watermark-rotation" value="-45" min="-180" max="180" class="modal-form-input">
             </div>
           </div>
           <div class="modal-form-grid">
             <div>
-              <label class="modal-form-label">Opacity</label>
+              <label class="modal-form-label" for="watermark-opacity">Opacity</label>
               <input type="range" id="watermark-opacity" min="0.05" max="0.5" step="0.05" value="0.15"
                 class="w-full">
               <span id="watermark-opacity-value" class="range-value-label">15%</span>
             </div>
             <div>
-              <label class="modal-form-label">Color</label>
+              <label class="modal-form-label" for="watermark-color">Color</label>
               <input type="color" id="watermark-color" value="#888888" class="modal-form-color">
             </div>
           </div>
           <div>
-            <label class="modal-form-label">Apply to</label>
+            <label class="modal-form-label" for="watermark-pages">Apply to</label>
             <select id="watermark-pages" class="modal-form-input">
               <option value="all">All Pages</option>
               <option value="current">Current Page Only</option>
@@ -925,37 +925,37 @@
     <div class="modal">
       <div class="modal-header">
         <h2>Bates Numbering</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="bates">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="bates">&times;</button>
       </div>
       <div class="modal-body">
         <div class="modal-form-stack">
           <div class="modal-form-grid">
             <div>
-              <label class="bates-label">Prefix</label>
+              <label class="bates-label" for="bates-prefix">Prefix</label>
               <input type="text" id="bates-prefix" value="" placeholder="e.g. DOC-"
                 class="bates-field">
             </div>
             <div>
-              <label class="bates-label">Suffix</label>
+              <label class="bates-label" for="bates-suffix">Suffix</label>
               <input type="text" id="bates-suffix" value="" placeholder="e.g. -R1"
                 class="bates-field">
             </div>
           </div>
           <div class="modal-form-grid">
             <div>
-              <label class="bates-label">Start Number</label>
+              <label class="bates-label" for="bates-start">Start Number</label>
               <input type="number" id="bates-start" value="1" min="0"
                 class="bates-field">
             </div>
             <div>
-              <label class="bates-label">Zero Padding (digits)</label>
+              <label class="bates-label" for="bates-pad">Zero Padding (digits)</label>
               <input type="number" id="bates-pad" value="6" min="1" max="12"
                 class="bates-field">
             </div>
           </div>
           <div class="modal-form-grid">
             <div>
-              <label class="bates-label">Position</label>
+              <label class="bates-label" for="bates-position">Position</label>
               <select id="bates-position" class="bates-field">
                 <option value="bottom-center">Bottom Center</option>
                 <option value="bottom-left">Bottom Left</option>
@@ -966,18 +966,18 @@
               </select>
             </div>
             <div>
-              <label class="bates-label">Font Size</label>
+              <label class="bates-label" for="bates-font-size">Font Size</label>
               <input type="number" id="bates-font-size" value="10" min="6" max="36"
                 class="bates-field">
             </div>
           </div>
           <div class="modal-form-grid">
             <div>
-              <label class="bates-label">Color</label>
+              <label class="bates-label" for="bates-color">Color</label>
               <input type="color" id="bates-color" value="#000000" class="modal-form-color">
             </div>
             <div>
-              <label class="bates-label">Page Range</label>
+              <label class="bates-label" for="bates-page-range">Page Range</label>
               <select id="bates-page-range" class="bates-field">
                 <option value="all">All Pages</option>
                 <option value="custom">Custom Range</option>
@@ -985,7 +985,7 @@
             </div>
           </div>
           <div id="bates-custom-range" class="hidden">
-            <label class="bates-label">Pages (e.g. 1-5, 8, 10-12)</label>
+            <label class="bates-label" for="bates-range-input">Pages (e.g. 1-5, 8, 10-12)</label>
             <input type="text" id="bates-range-input" placeholder="1-5, 8, 10-12"
               class="bates-field">
           </div>
@@ -1007,7 +1007,7 @@
     <div class="modal-panel modal-w580">
       <div class="modal-header">
         <h3>Headers &amp; Footers</h3>
-        <button class="modal-close" aria-label="Close" data-close-modal="hf">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="hf">&times;</button>
       </div>
       <div class="modal-body">
 
@@ -1027,15 +1027,15 @@
           <label class="modal-form-label-bold">Header</label>
           <div class="modal-form-grid-3 gap-sm">
             <div>
-              <label class="bates-label">Left</label>
+              <label class="bates-label" for="hf-top-left">Left</label>
               <input id="hf-top-left" class="bates-field hf-zone" placeholder="e.g. {filename}">
             </div>
             <div>
-              <label class="bates-label">Center</label>
+              <label class="bates-label" for="hf-top-center">Center</label>
               <input id="hf-top-center" class="bates-field hf-zone" placeholder="e.g. Confidential">
             </div>
             <div>
-              <label class="bates-label">Right</label>
+              <label class="bates-label" for="hf-top-right">Right</label>
               <input id="hf-top-right" class="bates-field hf-zone" placeholder="e.g. {date}">
             </div>
           </div>
@@ -1046,15 +1046,15 @@
           <label class="modal-form-label-bold">Footer</label>
           <div class="modal-form-grid-3 gap-sm">
             <div>
-              <label class="bates-label">Left</label>
+              <label class="bates-label" for="hf-bottom-left">Left</label>
               <input id="hf-bottom-left" class="bates-field hf-zone" placeholder="">
             </div>
             <div>
-              <label class="bates-label">Center</label>
+              <label class="bates-label" for="hf-bottom-center">Center</label>
               <input id="hf-bottom-center" class="bates-field hf-zone" placeholder="e.g. Page {page} of {pages}">
             </div>
             <div>
-              <label class="bates-label">Right</label>
+              <label class="bates-label" for="hf-bottom-right">Right</label>
               <input id="hf-bottom-right" class="bates-field hf-zone" placeholder="">
             </div>
           </div>
@@ -1064,15 +1064,15 @@
         <div class="modal-form-section">
           <div class="modal-form-grid-3">
             <div>
-              <label class="bates-label">Font Size</label>
+              <label class="bates-label" for="hf-font-size">Font Size</label>
               <input id="hf-font-size" type="number" class="bates-field" value="10" min="6" max="36">
             </div>
             <div>
-              <label class="bates-label">Color</label>
+              <label class="bates-label" for="hf-color">Color</label>
               <input id="hf-color" type="color" class="bates-field modal-form-color" value="#000000">
             </div>
             <div>
-              <label class="bates-label">Page Range</label>
+              <label class="bates-label" for="hf-page-range">Page Range</label>
               <select id="hf-page-range" class="bates-field">
                 <option value="all">All Pages</option>
                 <option value="custom">Custom</option>
@@ -1083,7 +1083,7 @@
 
         <!-- Custom range (hidden by default) -->
         <div id="hf-custom-range" class="hidden modal-form-section">
-          <label class="bates-label">Pages (e.g. 1-5, 8, 10-12)</label>
+          <label class="bates-label" for="hf-range-input">Pages (e.g. 1-5, 8, 10-12)</label>
           <input id="hf-range-input" class="bates-field" placeholder="1-5, 8, 10-12">
         </div>
 
@@ -1135,7 +1135,7 @@
     <div class="modal-panel modal-md">
       <div class="modal-header">
         <h2>Signature</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="signature">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="signature">&times;</button>
       </div>
       <div class="modal-body">
         <!-- Tabs -->
@@ -1157,7 +1157,7 @@
         <div class="sig-pane hidden" data-sig-pane="type">
           <input type="text" id="sig-type-input" class="sig-type-field" placeholder="Your name">
           <div>
-            <label class="modal-form-label">Font Style</label>
+            <label class="modal-form-label" for="sig-type-font">Font Style</label>
             <select id="sig-type-font" class="modal-form-input">
               <option value="Dancing Script">Cursive (Dancing Script)</option>
               <option value="Caveat">Handwritten (Caveat)</option>
@@ -1201,7 +1201,7 @@
     <div class="modal modal-w440">
       <div class="modal-header">
         <h2>OCR — Text Recognition</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="ocr">×</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="ocr">×</button>
       </div>
       <div class="modal-body">
         <p class="modal-form-hint">
@@ -1249,16 +1249,16 @@
     <div class="modal modal-w460">
       <div class="modal-header">
         <h2>Password Protect PDF</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="encrypt">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="encrypt">&times;</button>
       </div>
       <div class="modal-body">
         <div class="modal-form-stack">
           <div>
-            <label class="bates-label">User Password (to open)</label>
+            <label class="bates-label" for="encrypt-user-pw">User Password (to open)</label>
             <input type="password" id="encrypt-user-pw" class="bates-field" placeholder="Leave blank for no open password">
           </div>
           <div>
-            <label class="bates-label">Owner Password (to edit)</label>
+            <label class="bates-label" for="encrypt-owner-pw">Owner Password (to edit)</label>
             <input type="password" id="encrypt-owner-pw" class="bates-field" placeholder="Required">
           </div>
           <div>
@@ -1285,40 +1285,40 @@
     <div class="modal modal-md">
       <div class="modal-header">
         <h2>Document Metadata</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="metadata">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="metadata">&times;</button>
       </div>
       <div class="modal-body">
         <div class="modal-form-stack">
           <div>
-            <label class="bates-label">Title</label>
+            <label class="bates-label" for="meta-title">Title</label>
             <input type="text" id="meta-title" class="bates-field" placeholder="Document title">
           </div>
           <div>
-            <label class="bates-label">Author</label>
+            <label class="bates-label" for="meta-author">Author</label>
             <input type="text" id="meta-author" class="bates-field" placeholder="Author name">
           </div>
           <div>
-            <label class="bates-label">Subject</label>
+            <label class="bates-label" for="meta-subject">Subject</label>
             <input type="text" id="meta-subject" class="bates-field" placeholder="Document subject">
           </div>
           <div>
-            <label class="bates-label">Keywords</label>
+            <label class="bates-label" for="meta-keywords">Keywords</label>
             <input type="text" id="meta-keywords" class="bates-field" placeholder="keyword1, keyword2">
           </div>
           <div>
-            <label class="bates-label">Creator</label>
+            <label class="bates-label" for="meta-creator">Creator</label>
             <input type="text" id="meta-creator" class="bates-field" readonly>
           </div>
           <div>
-            <label class="bates-label">Producer</label>
+            <label class="bates-label" for="meta-producer">Producer</label>
             <input type="text" id="meta-producer" class="bates-field" readonly>
           </div>
           <div>
-            <label class="bates-label">Creation Date</label>
+            <label class="bates-label" for="meta-creation-date">Creation Date</label>
             <input type="text" id="meta-creation-date" class="bates-field" readonly>
           </div>
           <div>
-            <label class="bates-label">Modification Date</label>
+            <label class="bates-label" for="meta-mod-date">Modification Date</label>
             <input type="text" id="meta-mod-date" class="bates-field" readonly>
           </div>
         </div>
@@ -1336,7 +1336,7 @@
     <div class="modal modal-w520">
       <div class="modal-header">
         <h2>Search &amp; Redact</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="redact-search">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="redact-search">&times;</button>
       </div>
       <div class="modal-body">
         <p class="modal-form-hint">
@@ -1351,7 +1351,7 @@
           <label><input type="checkbox" class="redact-pattern-cb" value="custom"> Custom Pattern</label>
         </div>
         <div id="redact-custom-row" class="hidden modal-form-section">
-          <label class="bates-label">Custom Regex or Text</label>
+          <label class="bates-label" for="redact-custom-input">Custom Regex or Text</label>
           <input type="text" id="redact-custom-input" class="bates-field" placeholder="e.g. ACME Corp or \\d{3}-\\d{4}">
         </div>
         <div id="redact-results" class="hidden modal-preview-box modal-scrollable-list">
@@ -1371,12 +1371,12 @@
     <div class="modal modal-w420">
       <div class="modal-header">
         <h2>Export Pages to Image</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="export-image">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="export-image">&times;</button>
       </div>
       <div class="modal-body">
         <div class="modal-form-stack">
           <div>
-            <label class="bates-label">Pages</label>
+            <label class="bates-label" for="export-img-scope">Pages</label>
             <select id="export-img-scope" class="bates-field">
               <option value="current">Current Page</option>
               <option value="all">All Pages</option>
@@ -1384,19 +1384,19 @@
             </select>
           </div>
           <div id="export-img-range-row" class="hidden">
-            <label class="bates-label">Page Range (e.g. 1-5, 8)</label>
+            <label class="bates-label" for="export-img-range">Page Range (e.g. 1-5, 8)</label>
             <input type="text" id="export-img-range" class="bates-field" placeholder="1-5, 8, 10-12">
           </div>
           <div class="modal-form-grid">
             <div>
-              <label class="bates-label">Format</label>
+              <label class="bates-label" for="export-img-format">Format</label>
               <select id="export-img-format" class="bates-field">
                 <option value="png">PNG</option>
                 <option value="jpg">JPEG</option>
               </select>
             </div>
             <div>
-              <label class="bates-label">DPI</label>
+              <label class="bates-label" for="export-img-dpi">DPI</label>
               <select id="export-img-dpi" class="bates-field">
                 <option value="72">72 (Screen)</option>
                 <option value="150" selected>150 (Standard)</option>
@@ -1406,7 +1406,7 @@
             </div>
           </div>
           <div id="export-img-quality-row">
-            <label class="bates-label">JPEG Quality</label>
+            <label class="bates-label" for="export-img-quality">JPEG Quality</label>
             <input type="range" id="export-img-quality" min="50" max="100" value="92" class="w-full">
             <span id="export-img-quality-val" class="range-value-label">92%</span>
           </div>
@@ -1424,7 +1424,7 @@
     <div class="modal modal-w480">
       <div class="modal-header">
         <h2>Create PDF from Images</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="create-from-images">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="create-from-images">&times;</button>
       </div>
       <div class="modal-body">
         <div id="images-drop-zone" class="modal-drop-zone modal-form-section">
@@ -1435,7 +1435,7 @@
         <ul class="file-list" id="images-file-list"></ul>
         <div class="modal-form-grid mt-12">
           <div>
-            <label class="bates-label">Page Size</label>
+            <label class="bates-label" for="images-page-size">Page Size</label>
             <select id="images-page-size" class="bates-field">
               <option value="fit">Fit to Image</option>
               <option value="letter">Letter (8.5 x 11)</option>
@@ -1444,7 +1444,7 @@
             </select>
           </div>
           <div>
-            <label class="bates-label">Margin (pt)</label>
+            <label class="bates-label" for="images-margin">Margin (pt)</label>
             <input type="number" id="images-margin" class="bates-field" value="0" min="0" max="144">
           </div>
         </div>
@@ -1461,12 +1461,12 @@
     <div class="modal modal-sm">
       <div class="modal-header">
         <h2>Optimize PDF</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="optimize">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="optimize">&times;</button>
       </div>
       <div class="modal-body">
         <div class="modal-form-grid">
           <div>
-            <label class="bates-label">Mode</label>
+            <label class="bates-label" for="optimize-mode">Mode</label>
             <select id="optimize-mode" class="bates-field">
               <option value="smart" selected>Smart — preserve text, compress images</option>
               <option value="images">Images Only — recompress embedded images</option>
@@ -1474,7 +1474,7 @@
             </select>
           </div>
           <div>
-            <label class="bates-label">Preset</label>
+            <label class="bates-label" for="optimize-preset">Preset</label>
             <select id="optimize-preset" class="bates-field">
               <option value="screen">Screen (72 DPI, smaller file)</option>
               <option value="ebook" selected>eBook (150 DPI, balanced)</option>
@@ -1486,7 +1486,7 @@
         </div>
         <div id="optimize-custom-opts" class="modal-form-grid hidden mt-8">
           <div>
-            <label class="bates-label">DPI</label>
+            <label class="bates-label" for="optimize-dpi">DPI</label>
             <select id="optimize-dpi" class="bates-field">
               <option value="72">72</option>
               <option value="100">100</option>
@@ -1496,7 +1496,7 @@
             </select>
           </div>
           <div>
-            <label class="bates-label">JPEG Quality</label>
+            <label class="bates-label" for="optimize-quality">JPEG Quality</label>
             <input type="range" id="optimize-quality" min="30" max="95" value="75" class="w-full">
             <span id="optimize-quality-val" class="range-value-label">75%</span>
           </div>
@@ -1518,7 +1518,7 @@
     <div class="modal-panel modal-xl">
       <div class="modal-header">
         <h2>Compare Documents</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="compare">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="compare">&times;</button>
       </div>
       <div class="modal-body">
         <!-- File selection (shown first) -->
@@ -1532,7 +1532,7 @@
           </div>
           <div class="modal-form-grid mt-12">
             <div>
-              <label class="bates-label">Comparison DPI</label>
+              <label class="bates-label" for="compare-dpi">Comparison DPI</label>
               <select id="compare-dpi" class="bates-field">
                 <option value="72">72 (Fast)</option>
                 <option value="96" selected>96 (Default)</option>
@@ -1540,7 +1540,7 @@
               </select>
             </div>
             <div>
-              <label class="bates-label">Sensitivity</label>
+              <label class="bates-label" for="compare-threshold">Sensitivity</label>
               <select id="compare-threshold" class="bates-field">
                 <option value="15">High (15)</option>
                 <option value="30" selected>Normal (30)</option>
@@ -1591,7 +1591,7 @@
     <div class="modal modal-lg">
       <div class="modal-header">
         <h2>Annotation Summary</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="comment-summary">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="comment-summary">&times;</button>
       </div>
       <div class="modal-body">
         <div id="comment-summary-stats" class="modal-stat-grid">
@@ -1609,7 +1609,7 @@
           </div>
         </div>
         <div class="modal-form-section">
-          <label class="bates-label">Export Format</label>
+          <label class="bates-label" for="comment-export-format">Export Format</label>
           <select id="comment-export-format" class="bates-field w-auto">
             <option value="text">Plain Text</option>
             <option value="json">JSON</option>
@@ -1631,7 +1631,7 @@
     <div class="modal modal-w420">
       <div class="modal-header">
         <h2 id="form-data-modal-title">Form Data</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="form-data">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="form-data">&times;</button>
       </div>
       <div class="modal-body">
         <!-- Import pane -->
@@ -1651,7 +1651,7 @@
           <p class="modal-form-hint">
             Export current form data to a file.
           </p>
-          <label class="bates-label">Format</label>
+          <label class="bates-label" for="form-export-format">Format</label>
           <select id="form-export-format" class="bates-field">
             <option value="json">JSON</option>
             <option value="xfdf">XFDF (Adobe Compatible)</option>
@@ -1671,17 +1671,17 @@
     <div class="modal modal-sm">
       <div class="modal-header">
         <h2>Exhibit Stamp</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="exhibit">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="exhibit">&times;</button>
       </div>
       <div class="modal-body">
-        <label class="bates-label">Numbering Format</label>
+        <label class="bates-label" for="exhibit-format">Numbering Format</label>
         <select id="exhibit-format" class="bates-field">
           <option value="letter">A, B, C...</option>
           <option value="number">1, 2, 3...</option>
           <option value="roman-upper">I, II, III...</option>
           <option value="roman-lower">i, ii, iii...</option>
         </select>
-        <label class="bates-label mt-12">Prefix (optional)</label>
+        <label class="bates-label mt-12" for="exhibit-prefix">Prefix (optional)</label>
         <input type="text" id="exhibit-prefix" class="bates-field" placeholder="e.g. Plaintiff's ">
         <label class="modal-checkbox-list mt-12">
           <label><input type="checkbox" id="exhibit-include-date" checked> Include date on stamp</label>
@@ -1706,7 +1706,7 @@
     <div class="modal modal-w440">
       <div class="modal-header">
         <h2>Sanitize Document</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="sanitize">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="sanitize">&times;</button>
       </div>
       <div class="modal-body">
         <p class="modal-form-hint">
@@ -1736,7 +1736,7 @@
     <div class="modal modal-lg">
       <div class="modal-header">
         <h2>Page Labels</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="page-labels">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="page-labels">&times;</button>
       </div>
       <div class="modal-body">
         <p class="modal-form-hint">
@@ -1763,7 +1763,7 @@
     <div class="modal modal-w560">
       <div class="modal-header">
         <h2>Replace Pages</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="replace-pages">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="replace-pages">&times;</button>
       </div>
       <div class="modal-body">
         <p class="modal-form-hint">
@@ -1809,7 +1809,7 @@
     <div class="modal modal-w520">
       <div class="modal-header">
         <h2>Keyboard Shortcuts</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="shortcuts">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="shortcuts">&times;</button>
       </div>
       <div class="modal-body">
         <div class="shortcuts-grid">
@@ -1863,7 +1863,7 @@
     <div class="modal modal-sm">
       <div class="modal-header">
         <h2>About Mudbrick</h2>
-        <button class="modal-close" aria-label="Close" data-close-modal="about">&times;</button>
+        <button type="button" class="modal-close" aria-label="Close" data-close-modal="about">&times;</button>
       </div>
       <div class="modal-body modal-body-centered">
         <div class="about-emoji">🧱</div>

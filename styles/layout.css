@@ -2171,3 +2171,57 @@ html[data-theme="dark"] .crop-shade {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ── Dark Mode: Text Edit Buttons ── */
+
+html[data-theme="dark"] .text-edit-commit {
+  background: #2563eb;
+  color: #fff;
+}
+html[data-theme="dark"] .text-edit-commit:hover {
+  background: #1d4ed8;
+}
+
+/* ── Dark Mode: Image Edit Overlay Buttons ── */
+
+html[data-theme="dark"] .image-edit-replace {
+  background: rgba(59, 130, 246, 0.95);
+}
+html[data-theme="dark"] .image-edit-delete {
+  background: rgba(239, 68, 68, 0.95);
+}
+html[data-theme="dark"] .image-edit-deleted {
+  border-color: #f87171;
+  color: #f87171;
+}
+
+/* ── Dark Mode: Find Highlights ── */
+
+html[data-theme="dark"] .find-highlight {
+  background: rgba(253, 224, 71, 0.5);
+}
+html[data-theme="dark"] .find-highlight-active {
+  background: rgba(249, 115, 22, 0.7);
+}
+
+/* ── Color Swatch Focus State ── */
+
+.color-swatch:focus-visible {
+  outline: 2px solid var(--mb-accent);
+  outline-offset: 2px;
+}
+
+/* ── Dark Mode: Status Bar Badges ── */
+
+html[data-theme="dark"] #status-bar .status-badge.encrypted {
+  background: rgba(5, 150, 105, 0.3);
+  color: #6ee7b7;
+}
+html[data-theme="dark"] #status-bar .status-badge.tagged {
+  background: rgba(37, 99, 235, 0.3);
+  color: #93c5fd;
+}
+html[data-theme="dark"] #status-bar .status-offline {
+  background: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
