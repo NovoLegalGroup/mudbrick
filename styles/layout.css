@@ -1042,6 +1042,24 @@ html, body {
   background: rgba(255, 255, 255, 0.95);
 }
 
+/* Paragraph grouping indicator — vertical bar to show grouped lines */
+.text-edit-paragraph {
+  background: var(--mb-accent);
+  border-radius: 2px;
+  opacity: 0.3;
+  z-index: 14;
+  transition: opacity 0.2s;
+}
+.text-edit-paragraph:hover {
+  opacity: 0.6;
+}
+
+/* Undo/redo button disabled state */
+.text-edit-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 /* ── Text/Image Edit Toolbar ── */
 
 .text-edit-toolbar {
@@ -2109,6 +2127,9 @@ html[data-theme="dark"] .text-edit-line:focus {
 }
 html[data-theme="dark"] .text-edit-line.text-edit-dirty {
   background: rgba(234, 179, 8, 0.08);
+}
+html[data-theme="dark"] .text-edit-paragraph {
+  background: var(--mb-accent);
 }
 
 html[data-theme="dark"] .image-edit-btn {
