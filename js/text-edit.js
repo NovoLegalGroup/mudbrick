@@ -29,35 +29,38 @@ function escapeHtml(str) {
 }
 
 /**
- * Sample the exact background color from a rendered PDF canvas near the given region.
- * Reads a vertical strip just left of the text area and picks the most frequent
- * exact color. Used only for the commit-time cover rectangle, not for the overlay.
+ * Sample the background color from the text region itself — the lightest
+ * frequent color within the area is the background. Sampling to the LEFT
+ * of text fails when text starts at a cell edge (hits border or white).
  */
 function sampleBackgroundColor(canvas, x, y, width, height) {
   if (!canvas) return '#ffffff';
   const ctx = canvas.getContext('2d');
   const dpr = canvas.width / (parseFloat(canvas.style.width) || canvas.offsetWidth) || 1;
 
-  // Read a 1px-wide vertical strip just left of the text — pure background
-  const sx = Math.max(0, Math.round((x - 3) * dpr));
+  // Read the full text region — background pixels will outnumber text pixels
+  const sx = Math.max(0, Math.round(x * dpr));
   const sy = Math.max(0, Math.round(y * dpr));
+  const sw = Math.min(Math.round(width * dpr), canvas.width - sx);
   const sh = Math.min(Math.round(height * dpr), canvas.height - sy);
-  if (sh <= 0) return '#ffffff';
+  if (sw <= 0 || sh <= 0) return '#ffffff';
 
   let data;
   try {
-    data = ctx.getImageData(sx, sy, 1, sh).data;
+    data = ctx.getImageData(sx, sy, sw, sh).data;
   } catch (_) {
     return '#ffffff';
   }
 
-  // Count exact pixel colors (no quantization), skip dark pixels (borders/text)
+  // Count light pixel colors (background), skip dark pixels (text/borders).
+  // Quantize lightly (round to nearest 4) to group anti-aliased background.
   const counts = {};
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i], g = data[i + 1], b = data[i + 2];
     const lum = r * 0.299 + g * 0.587 + b * 0.114;
-    if (lum < 150) continue; // skip dark pixels
-    const key = `${r},${g},${b}`;
+    if (lum < 150) continue; // skip text/dark pixels
+    const qr = (r >> 2) << 2, qg = (g >> 2) << 2, qb = (b >> 2) << 2;
+    const key = `${qr},${qg},${qb}`;
     counts[key] = (counts[key] || 0) + 1;
   }
 
@@ -477,10 +480,18 @@ function groupIntoLines(items, viewport, styles) {
     const left = tx[4];
     const top = tx[5] - fontSize;
 
-    // Use styles.fontFamily (e.g. "Arial-BoldMT") for reliable bold/italic
-    // detection — the synthetic fontName (e.g. "g_d0_f1") often lacks this info
+    // Resolve the best font name for bold/italic detection and standard font mapping.
+    // pdf.js fontName can be synthetic (e.g. "g_d0_f1") or real (e.g. "BCDFEE+ArialMT-Bold").
+    // styles.fontFamily can be a real name or a CSS generic ("sans-serif", "serif").
+    // Use whichever contains more useful info (bold/italic keywords).
     const styleInfo = styles && styles[item.fontName];
-    const resolvedFontName = (styleInfo && styleInfo.fontFamily) || item.fontName;
+    const familyName = (styleInfo && styleInfo.fontFamily) || '';
+    const rawName = item.fontName || '';
+    // Prefer whichever name contains style keywords; fall back to the longer name
+    const hasStyleInfo = (n) => /bold|italic|oblique|heavy|black|light|medium/i.test(n);
+    const resolvedFontName = hasStyleInfo(rawName) ? rawName
+      : hasStyleInfo(familyName) ? familyName
+      : (rawName.length > familyName.length ? rawName : familyName) || 'Helvetica';
 
     return {
       str: item.str,
