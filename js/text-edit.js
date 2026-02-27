@@ -74,7 +74,16 @@ function sampleTextColor(canvas, x, y, width, height) {
   }
 
   if (!bestColor) return '#000000';
-  const [r, g, b] = bestColor.split(',').map(Number);
+  let [r, g, b] = bestColor.split(',').map(Number);
+  // Ensure minimum readability on white background: if the color is too light
+  // (luminance > 180), darken it proportionally so text is always legible.
+  const lum = r * 0.299 + g * 0.587 + b * 0.114;
+  if (lum > 180) {
+    const scale = 180 / lum;
+    r = Math.round(r * scale);
+    g = Math.round(g * scale);
+    b = Math.round(b * scale);
+  }
   return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
 }
 
@@ -104,6 +113,12 @@ let currentPdfDoc = null;
 let _pdfCanvas = null; // reference to rendered PDF canvas for color sampling
 
 let _focusedLine = null; // currently focused text-edit-line div
+
+// Single-block editing state
+let _paragraphData = [];    // computed paragraphs (arrays of line objects)
+let _activeBlockIdx = -1;   // index into _paragraphData of currently edited block
+let _blockZones = [];       // click-zone DOM elements for each paragraph
+let _editedBlocks = new Map(); // paraIdx -> array of dirty line data from deactivated blocks
 
 // Undo/redo stacks — stores snapshots per line
 let undoStack = []; // array of { div, text, dataset snapshot }
@@ -327,16 +342,80 @@ function handleTextEditKeydown(e) {
     return;
   }
 
-  // Escape — cancel text edit
+  // Escape — deactivate current block first, then cancel on second press
   if (e.key === 'Escape') {
     e.preventDefault();
     e.stopPropagation();
-    toolbar?.querySelector('.text-edit-cancel')?.click();
+    if (_activeBlockIdx >= 0) {
+      deactivateBlock();
+    } else {
+      toolbar?.querySelector('.text-edit-cancel')?.click();
+    }
     return;
   }
 }
 
 /* ═══════════════════ Text Grouping ═══════════════════ */
+
+/**
+ * Detect whether the page has a two-column layout by analyzing the horizontal
+ * distribution of text items. Returns the X coordinate to split columns, or
+ * null for single-column pages.
+ *
+ * Uses a histogram that counts distinct Y-bands per bucket (not total items).
+ * This prevents wide spanning elements like centered titles from filling the
+ * gap between columns.
+ */
+function detectColumnSplit(mapped, pageWidth) {
+  const NUM_BUCKETS = 100;
+  const bucketWidth = pageWidth / NUM_BUCKETS;
+  // Count distinct Y-bands (rounded to nearest 5px) per bucket
+  const bucketYSets = Array.from({ length: NUM_BUCKETS }, () => new Set());
+
+  for (const item of mapped) {
+    if (!item.str.trim()) continue;
+    const yBand = Math.round(item.top / 5) * 5; // quantize Y to 5px bands
+    const start = Math.max(0, Math.floor(item.left / bucketWidth));
+    const end = Math.min(NUM_BUCKETS - 1, Math.floor((item.left + item.width) / bucketWidth));
+    for (let b = start; b <= end; b++) bucketYSets[b].add(yBand);
+  }
+  const histogram = bucketYSets.map(s => s.size);
+
+  // Search for the widest low-density gap in the central 30%-70% of the page
+  const minB = Math.floor(0.30 * NUM_BUCKETS);
+  const maxB = Math.floor(0.70 * NUM_BUCKETS);
+  const maxCount = Math.max(...histogram);
+  if (maxCount === 0) return null;
+  // A gap bucket may have a few spanning items (titles, headers) but far fewer
+  // Y-bands than a real column. Threshold at 15% of the densest bucket.
+  const emptyThreshold = Math.max(2, Math.floor(maxCount * 0.15));
+
+  let bestStart = -1, bestEnd = -1, bestWidth = 0, gapStart = -1;
+
+  for (let b = minB; b <= maxB; b++) {
+    if (histogram[b] <= emptyThreshold) {
+      if (gapStart === -1) gapStart = b;
+    } else {
+      if (gapStart !== -1) {
+        const w = b - gapStart;
+        if (w > bestWidth) { bestWidth = w; bestStart = gapStart; bestEnd = b; }
+        gapStart = -1;
+      }
+    }
+  }
+  if (gapStart !== -1) {
+    const w = maxB - gapStart;
+    if (w > bestWidth) { bestWidth = w; bestStart = gapStart; bestEnd = maxB; }
+  }
+
+  // Gap must be at least 3% of page width with content on both sides
+  if (bestWidth < 3) return null;
+  const leftContent = histogram.slice(0, bestStart).reduce((a, b) => a + b, 0);
+  const rightContent = histogram.slice(bestEnd).reduce((a, b) => a + b, 0);
+  if (leftContent < 5 || rightContent < 5) return null;
+
+  return ((bestStart + bestEnd) / 2) * bucketWidth;
+}
 
 function groupIntoLines(items, viewport) {
   if (!items.length) return [];
@@ -364,34 +443,61 @@ function groupIntoLines(items, viewport) {
     };
   });
 
-  mapped.sort((a, b) => a.top - b.top || a.left - b.left);
+  // Detect column layout and partition items
+  const splitX = detectColumnSplit(mapped, viewport.width);
+  let columns;
+  if (splitX === null) {
+    columns = [mapped]; // single-column page
+  } else {
+    const left = [], right = [];
+    for (const item of mapped) {
+      if (!item.str.trim()) continue;
+      const center = item.left + item.width / 2;
+      (center < splitX ? left : right).push(item);
+    }
+    columns = [left, right].filter(c => c.length > 0);
+  }
 
-  const lines = [];
-  let currentLine = null;
+  // Group into lines within each column independently.
+  // Also split on large horizontal gaps (table cell boundaries).
+  const allLines = [];
+  for (const colItems of columns) {
+    colItems.sort((a, b) => a.top - b.top || a.left - b.left);
+    let currentLine = null;
+    for (const item of colItems) {
+      if (!item.str.trim()) continue;
 
-  for (const item of mapped) {
-    if (!item.str.trim()) continue;
+      if (!currentLine || Math.abs(item.top - currentLine.top) > 3) {
+        // Different Y — new line
+        currentLine = { top: item.top, left: item.left, items: [item] };
+        allLines.push(currentLine);
+      } else {
+        // Same Y — check horizontal gap to detect table cell boundaries
+        const lastItem = currentLine.items[currentLine.items.length - 1];
+        const gap = item.left - (lastItem.left + lastItem.width);
+        const gapThreshold = Math.max(lastItem.fontSize * 1.5, 20);
 
-    if (!currentLine || Math.abs(item.top - currentLine.top) > 3) {
-      currentLine = {
-        top: item.top,
-        left: item.left,
-        items: [item],
-      };
-      lines.push(currentLine);
-    } else {
-      currentLine.items.push(item);
-      if (item.left < currentLine.left) currentLine.left = item.left;
+        if (gap > gapThreshold) {
+          // Large gap — separate cell/segment, start new line
+          currentLine = { top: item.top, left: item.left, items: [item] };
+          allLines.push(currentLine);
+        } else {
+          currentLine.items.push(item);
+          if (item.left < currentLine.left) currentLine.left = item.left;
+        }
+      }
     }
   }
 
-  return lines.map(line => {
+  // Sort by reading order
+  allLines.sort((a, b) => a.top - b.top || a.left - b.left);
+
+  return allLines.map(line => {
     const text = line.items.map(i => i.str).join('');
     const minLeft = Math.min(...line.items.map(i => i.left));
     const maxRight = Math.max(...line.items.map(i => i.left + i.width));
     const fontSize = line.items[0].fontSize;
     const height = Math.max(...line.items.map(i => i.height));
-    // Compute precise bounding box in PDF coordinates for accurate cover rects
     const pdfMinX = Math.min(...line.items.map(i => i.pdfX));
     const pdfMaxX = Math.max(...line.items.map(i => i.pdfX + (i.width / (viewport?.scale || 1))));
     const pdfMinY = Math.min(...line.items.map(i => i.pdfY));
@@ -401,13 +507,13 @@ function groupIntoLines(items, viewport) {
       left: minLeft,
       top: line.top,
       width: maxRight - minLeft,
-      height: height + 2,     // tighter fit for visual blending
+      height: height + 2,
       fontSize,
       fontName: line.items[0].fontName,
       pdfX: pdfMinX,
       pdfY: pdfMinY,
       pdfFontSize: line.items[0].pdfFontSize,
-      pdfLineWidth: pdfMaxX - pdfMinX,  // precise width in PDF units
+      pdfLineWidth: pdfMaxX - pdfMinX,
       pdfItems: line.items,
     };
   });
@@ -446,12 +552,13 @@ function groupIntoParagraphs(lines) {
     const curr = lines[i];
 
     const verticalGap = curr.top - (prev.top + prev.height);
-    const lineSpacing = prev.height * 1.8;
-    const leftAligned = Math.abs(curr.left - prev.left) < prev.height * 2;
+    const lineSpacing = prev.height * 1.5;
+    const leftAligned = Math.abs(curr.left - prev.left) < prev.height * 1.5;
+    const widthSimilar = Math.abs(curr.width - prev.width) < Math.max(curr.width, prev.width) * 0.5;
     const sameFont = curr.fontName === prev.fontName;
     const sameSize = Math.abs(curr.fontSize - prev.fontSize) < 2;
 
-    if (verticalGap < lineSpacing && leftAligned && sameFont && sameSize) {
+    if (verticalGap < lineSpacing && leftAligned && widthSimilar && sameFont && sameSize) {
       currentPara.push(curr);
     } else {
       paragraphs.push(currentPara);
@@ -516,114 +623,53 @@ export async function enterTextEditMode(pageNum, pdfDoc, viewport, container, pd
   currentPageNum = pageNum;
   currentPdfDoc = pdfDoc;
 
-  // Reset undo/redo
+  // Reset state
   undoStack = [];
   redoStack = [];
+  _activeBlockIdx = -1;
+  _blockZones = [];
+  _editedBlocks = new Map();
 
   // Hide existing text layer spans
   container.querySelectorAll('span').forEach(s => s.style.visibility = 'hidden');
 
-  // Group lines into paragraphs for visual grouping
-  const paragraphs = groupIntoParagraphs(lines);
+  // Group lines into paragraphs — store for single-block editing
+  _paragraphData = groupIntoParagraphs(lines);
 
-  // Create editable overlays for each line, wrapped in paragraph groups
-  for (const para of paragraphs) {
-    // Create paragraph wrapper (visual grouping indicator)
-    let paraWrapper = null;
-    if (para.length > 1) {
-      paraWrapper = document.createElement('div');
-      paraWrapper.className = 'text-edit-paragraph';
-      const paraTop = Math.min(...para.map(l => l.top));
-      const paraBottom = Math.max(...para.map(l => l.top + l.height));
-      const paraLeft = Math.min(...para.map(l => l.left));
-      paraWrapper.style.position = 'absolute';
-      paraWrapper.style.left = (paraLeft - 3) + 'px';
-      paraWrapper.style.top = (paraTop - 2) + 'px';
-      paraWrapper.style.width = '3px';
-      paraWrapper.style.height = (paraBottom - paraTop + 4) + 'px';
-      paraWrapper.style.pointerEvents = 'none';
-      container.appendChild(paraWrapper);
-    }
+  // Create transparent click zones for each paragraph block
+  for (let pi = 0; pi < _paragraphData.length; pi++) {
+    const para = _paragraphData[pi];
+    const paraTop = Math.min(...para.map(l => l.top));
+    const paraBottom = Math.max(...para.map(l => l.top + l.height));
+    const paraLeft = Math.min(...para.map(l => l.left));
+    const paraRight = Math.max(...para.map(l => l.left + l.width));
 
-    for (const line of para) {
-      const div = document.createElement('div');
-      div.className = 'text-edit-line';
-      div.contentEditable = 'true';
-      div.spellcheck = false;
-      div.textContent = line.text;
-
-      // Position & size
-      div.style.left = line.left + 'px';
-      div.style.top = line.top + 'px';
-      div.style.minWidth = line.width + 'px';
-      div.style.height = line.height + 'px';
-      div.style.fontSize = line.fontSize + 'px';
-      div.style.lineHeight = line.height + 'px';
-
-      // Match PDF font visually
-      const cssFont = mapToCSSFont(line.fontName);
-      const fontStyle = detectFontStyle(line.fontName);
-      div.style.fontFamily = cssFont;
-      if (fontStyle.bold) div.style.fontWeight = 'bold';
-      if (fontStyle.italic) div.style.fontStyle = 'italic';
-
-      // Color-match: sample the text color from the rendered PDF canvas
-      const matchedColor = sampleTextColor(
-        _pdfCanvas, line.left, line.top, line.width, line.height
-      );
-      div.style.color = matchedColor;
-      div.dataset.matchedColor = matchedColor;
-
-      // Store original data
-      div.dataset.original = line.text;
-      div.dataset.pdfX = line.pdfX;
-      div.dataset.pdfY = line.pdfY;
-      div.dataset.pdfFontSize = line.pdfFontSize;
-      div.dataset.pdfLineWidth = line.pdfLineWidth || '';
-      div.dataset.fontName = line.fontName || '';
-      div.dataset.cssFont = cssFont;
-      div.dataset.width = line.width;
-      div.dataset.height = line.height;
-      div.dataset.paraId = para.length > 1 ? paragraphs.indexOf(para).toString() : '';
-
-      // Track formatting changes per line
-      div.dataset.fontSizeOverride = '';
-      div.dataset.colorOverride = '';
-      div.dataset.fontFamilyOverride = '';
-      div.dataset.fontNameOverride = '';
-      div.dataset.bold = fontStyle.bold ? 'true' : '';
-      div.dataset.italic = fontStyle.italic ? 'true' : '';
-
-      // Undo snapshot on first input per focus session
-      let snapshotTaken = false;
-      div.addEventListener('focus', () => {
-        snapshotTaken = false;
-        _focusedLine = div;
-        updateToolbarState(div);
-      });
-      div.addEventListener('input', () => {
-        if (!snapshotTaken) {
-          // Push undo snapshot using the original text (before this input session)
-          const snap = captureSnapshot(div);
-          snap.text = div.dataset._lastText || div.dataset.original;
-          undoStack.push(snap);
-          if (undoStack.length > MAX_UNDO) undoStack.shift();
-          redoStack = [];
-          updateUndoButtons();
-          snapshotTaken = true;
-        }
-        div.dataset._lastText = div.textContent;
-        markDirty(div);
-      });
-      div.addEventListener('blur', () => {
-        if (_focusedLine === div) _focusedLine = null;
-      });
-
-      container.appendChild(div);
-    }
+    const zone = document.createElement('div');
+    zone.className = 'text-edit-block-zone';
+    zone.dataset.blockIdx = pi;
+    zone.style.position = 'absolute';
+    zone.style.left = (paraLeft - 2) + 'px';
+    zone.style.top = (paraTop - 2) + 'px';
+    zone.style.width = (paraRight - paraLeft + 4) + 'px';
+    zone.style.height = (paraBottom - paraTop + 4) + 'px';
+    zone.style.cursor = 'text';
+    zone.style.zIndex = '14';
+    zone.addEventListener('click', () => activateBlock(pi));
+    container.appendChild(zone);
+    _blockZones.push(zone);
   }
 
   _focusedLine = null;
+
+  // Boost text-layer opacity so edit overlays are fully opaque
+  container.classList.add('text-edit-active');
+
+  // Lift form field overlay above text-edit lines so form inputs are clickable
+  const formOverlay = container.parentElement?.querySelector('#form-overlay');
+  if (formOverlay) {
+    formOverlay.style.zIndex = '20';
+    formOverlay.style.pointerEvents = 'auto';
+  }
 
   // Register keyboard handler for text edit shortcuts
   container.addEventListener('keydown', handleTextEditKeydown, true);
@@ -634,15 +680,241 @@ export async function enterTextEditMode(pageNum, pdfDoc, viewport, container, pd
   return true;
 }
 
+/* ── Single-block activation / deactivation ── */
+
+/**
+ * Activate a single paragraph block for editing.
+ * Creates contenteditable overlays only for lines in that block.
+ */
+function activateBlock(paraIdx) {
+  if (paraIdx === _activeBlockIdx) return;
+
+  // Deactivate current block first (saves dirty state)
+  if (_activeBlockIdx >= 0) deactivateBlock();
+
+  _activeBlockIdx = paraIdx;
+  const para = _paragraphData[paraIdx];
+  if (!para || !editContainer) return;
+
+  // Hide the click zone for this block
+  const zone = _blockZones[paraIdx];
+  if (zone) zone.style.display = 'none';
+
+  // Disable pointer-events on ALL other zones so mis-clicks don't activate them
+  for (let i = 0; i < _blockZones.length; i++) {
+    if (i !== paraIdx && _blockZones[i]) {
+      _blockZones[i].style.pointerEvents = 'none';
+    }
+  }
+
+  // Create a click shield behind the active lines — covers the full block
+  // area so clicks between lines don't fall through to zones below
+  const paraTop = Math.min(...para.map(l => l.top));
+  const paraBottom = Math.max(...para.map(l => l.top + l.height));
+  const paraLeft = Math.min(...para.map(l => l.left));
+  const paraRight = Math.max(...para.map(l => l.left + l.width));
+  const shield = document.createElement('div');
+  shield.className = 'text-edit-block-shield';
+  shield.style.position = 'absolute';
+  shield.style.left = (paraLeft - 10) + 'px';
+  shield.style.top = (paraTop - 10) + 'px';
+  shield.style.width = (paraRight - paraLeft + 20) + 'px';
+  shield.style.height = (paraBottom - paraTop + 20) + 'px';
+  shield.style.zIndex = '14';
+  shield.style.background = 'transparent';
+  shield.addEventListener('mousedown', e => e.stopPropagation());
+  editContainer.appendChild(shield);
+
+  // Check if this block has previously saved edits
+  const savedEdits = _editedBlocks.get(paraIdx);
+
+  for (let li = 0; li < para.length; li++) {
+    const line = para[li];
+    const saved = savedEdits ? savedEdits[li] : null;
+
+    const div = document.createElement('div');
+    div.className = 'text-edit-line';
+    div.contentEditable = 'true';
+    div.spellcheck = false;
+    div.textContent = saved ? saved.text : line.text;
+
+    // Position & size — use min-height so box can grow when editing
+    div.style.left = (line.left - 4) + 'px';
+    div.style.top = (line.top - 4) + 'px';
+    div.style.minWidth = (line.width + 24) + 'px';
+    div.style.minHeight = (line.height + 8) + 'px';
+    div.style.fontSize = (saved?.fontSizeOverride || line.fontSize) + 'px';
+    div.style.lineHeight = (line.height + 4) + 'px';
+
+    // Match PDF font visually
+    const cssFont = saved?.cssFont || mapToCSSFont(line.fontName);
+    const fontStyle = saved ? { bold: saved.bold, italic: saved.italic } : detectFontStyle(line.fontName);
+    div.style.fontFamily = cssFont;
+    if (fontStyle.bold) div.style.fontWeight = 'bold';
+    if (fontStyle.italic) div.style.fontStyle = 'italic';
+
+    // Color
+    const matchedColor = saved?.matchedColor || sampleTextColor(
+      _pdfCanvas, line.left, line.top, line.width, line.height
+    );
+    div.style.color = saved?.colorOverride || matchedColor;
+    div.dataset.matchedColor = matchedColor;
+
+    // Store original data
+    div.dataset.original = line.text;
+    div.dataset.pdfX = line.pdfX;
+    div.dataset.pdfY = line.pdfY;
+    div.dataset.pdfFontSize = line.pdfFontSize;
+    div.dataset.pdfLineWidth = line.pdfLineWidth || '';
+    div.dataset.fontName = line.fontName || '';
+    div.dataset.cssFont = cssFont;
+    div.dataset.width = line.width;
+    div.dataset.height = line.height;
+    div.dataset.blockIdx = paraIdx;
+    div.dataset.lineIdx = li;
+
+    // Restore formatting overrides from saved state
+    div.dataset.fontSizeOverride = saved?.fontSizeOverride || '';
+    div.dataset.colorOverride = saved?.colorOverride || '';
+    div.dataset.fontFamilyOverride = saved?.fontFamilyOverride || '';
+    div.dataset.fontNameOverride = saved?.fontNameOverride || '';
+    div.dataset.bold = fontStyle.bold ? 'true' : '';
+    div.dataset.italic = fontStyle.italic ? 'true' : '';
+
+    // Mark as dirty if previously edited
+    if (saved?.dirty) markDirty(div);
+
+    // Prevent clicks from propagating to zones below
+    div.addEventListener('mousedown', e => e.stopPropagation());
+
+    // Undo snapshot on first input per focus session
+    let snapshotTaken = false;
+    div.addEventListener('focus', () => {
+      snapshotTaken = false;
+      _focusedLine = div;
+      updateToolbarState(div);
+    });
+    div.addEventListener('input', () => {
+      if (!snapshotTaken) {
+        const snap = captureSnapshot(div);
+        snap.text = div.dataset._lastText || div.dataset.original;
+        undoStack.push(snap);
+        if (undoStack.length > MAX_UNDO) undoStack.shift();
+        redoStack = [];
+        updateUndoButtons();
+        snapshotTaken = true;
+      }
+      div.dataset._lastText = div.textContent;
+      markDirty(div);
+    });
+    div.addEventListener('blur', () => {
+      if (_focusedLine === div) _focusedLine = null;
+    });
+
+    editContainer.appendChild(div);
+  }
+
+  // Focus the first line of the activated block
+  const firstLine = editContainer.querySelector(`.text-edit-line[data-block-idx="${paraIdx}"]`);
+  if (firstLine) firstLine.focus();
+}
+
+/**
+ * Deactivate the current block — saves any dirty line data and removes overlays.
+ */
+function deactivateBlock() {
+  if (_activeBlockIdx < 0 || !editContainer) return;
+
+  // Remove click shield
+  editContainer.querySelectorAll('.text-edit-block-shield').forEach(el => el.remove());
+
+  // Re-enable pointer-events on all zones
+  for (const z of _blockZones) {
+    if (z) z.style.pointerEvents = '';
+  }
+
+  const blockLines = editContainer.querySelectorAll(`.text-edit-line[data-block-idx="${_activeBlockIdx}"]`);
+  const savedLines = [];
+  let hasDirty = false;
+
+  for (const div of blockLines) {
+    const isDirty = div.classList.contains('text-edit-dirty');
+    const newText = div.textContent;
+    const original = div.dataset.original;
+    const fontSizeOverride = div.dataset.fontSizeOverride;
+    const colorOverride = div.dataset.colorOverride;
+    const fontFamilyOverride = div.dataset.fontFamilyOverride;
+    const fontNameOverride = div.dataset.fontNameOverride;
+    const origStyle = detectFontStyle(div.dataset.fontName);
+    const bold = div.dataset.bold === 'true';
+    const italic = div.dataset.italic === 'true';
+    const hasTextChange = newText !== original;
+    const hasFormatChange = fontSizeOverride || colorOverride || fontFamilyOverride ||
+      bold !== origStyle.bold || italic !== origStyle.italic;
+
+    if (hasTextChange || hasFormatChange || isDirty) hasDirty = true;
+
+    savedLines.push({
+      text: newText,
+      matchedColor: div.dataset.matchedColor,
+      cssFont: div.dataset.cssFont,
+      bold,
+      italic,
+      fontSizeOverride: fontSizeOverride ? parseFloat(fontSizeOverride) : 0,
+      colorOverride: colorOverride || '',
+      fontFamilyOverride: fontFamilyOverride || '',
+      fontNameOverride: fontNameOverride || '',
+      dirty: hasTextChange || hasFormatChange || isDirty,
+      // Preserve original PDF data for commit
+      pdfX: parseFloat(div.dataset.pdfX),
+      pdfY: parseFloat(div.dataset.pdfY),
+      pdfFontSize: parseFloat(div.dataset.pdfFontSize),
+      pdfLineWidth: parseFloat(div.dataset.pdfLineWidth) || 0,
+      fontName: fontNameOverride || div.dataset.fontName,
+      screenWidth: parseFloat(div.dataset.width),
+      screenHeight: parseFloat(div.dataset.height),
+    });
+    div.remove();
+  }
+
+  if (hasDirty) {
+    _editedBlocks.set(_activeBlockIdx, savedLines);
+  }
+
+  // Re-show the click zone
+  const zone = _blockZones[_activeBlockIdx];
+  if (zone) {
+    zone.style.display = '';
+    // Add visual indicator if block has edits
+    if (hasDirty) zone.classList.add('text-edit-zone-dirty');
+  }
+
+  _activeBlockIdx = -1;
+  _focusedLine = null;
+}
+
 export function exitTextEditMode() {
   if (!active) return;
   active = false;
+
+  // Deactivate any active block first
+  if (_activeBlockIdx >= 0) deactivateBlock();
 
   if (editContainer) {
     editContainer.removeEventListener('keydown', handleTextEditKeydown, true);
     editContainer.querySelectorAll('.text-edit-line').forEach(el => el.remove());
     editContainer.querySelectorAll('.text-edit-paragraph').forEach(el => el.remove());
+    editContainer.querySelectorAll('.text-edit-block-zone').forEach(el => el.remove());
+    editContainer.querySelectorAll('.text-edit-block-shield').forEach(el => el.remove());
     editContainer.querySelectorAll('span').forEach(s => s.style.visibility = '');
+    editContainer.classList.remove('text-edit-active');
+
+    // Restore form overlay z-index
+    const formOverlay = editContainer.parentElement?.querySelector('#form-overlay');
+    if (formOverlay) {
+      formOverlay.style.zIndex = '';
+      formOverlay.style.pointerEvents = '';
+    }
   }
 
   if (toolbar) {
@@ -656,6 +928,10 @@ export function exitTextEditMode() {
   currentPdfDoc = null;
   _focusedLine = null;
   _pdfCanvas = null;
+  _paragraphData = [];
+  _activeBlockIdx = -1;
+  _blockZones = [];
+  _editedBlocks = new Map();
   undoStack = [];
   redoStack = [];
 }
@@ -728,7 +1004,7 @@ function createToolbar(container) {
     </div>
     <div class="text-edit-toolbar-sep"></div>
     <div class="text-edit-toolbar-group">
-      <span class="text-edit-info">Click text to edit</span>
+      <span class="text-edit-info">Click a text block to edit</span>
     </div>
     <div class="text-edit-toolbar-spacer"></div>
     <div class="text-edit-toolbar-group text-edit-actions">
@@ -918,12 +1194,17 @@ function markDirty(div) {
 /** Update the status text showing how many lines have been modified */
 function updateEditCount() {
   if (!toolbar || !editContainer) return;
-  const dirty = editContainer.querySelectorAll('.text-edit-line.text-edit-dirty').length;
+  // Count dirty lines in current active block
+  let dirty = editContainer.querySelectorAll('.text-edit-line.text-edit-dirty').length;
+  // Plus dirty lines from deactivated blocks
+  for (const [, savedLines] of _editedBlocks) {
+    dirty += savedLines.filter(l => l.dirty).length;
+  }
   const info = toolbar.querySelector('.text-edit-info');
   if (info) {
     info.textContent = dirty > 0
       ? `${dirty} line${dirty > 1 ? 's' : ''} modified`
-      : 'Click text to edit';
+      : 'Click a text block to edit';
   }
 }
 
@@ -957,9 +1238,13 @@ function updateToolbarState(div) {
 export async function commitTextEdits(pdfBytes, pageNum) {
   if (!editContainer) return null;
 
-  const editedLines = editContainer.querySelectorAll('.text-edit-line');
+  // Deactivate current block to save its state
+  if (_activeBlockIdx >= 0) deactivateBlock();
+
   const changes = [];
 
+  // Collect changes from currently active block's DOM (if any)
+  const editedLines = editContainer.querySelectorAll('.text-edit-line');
   for (const div of editedLines) {
     const newText = div.textContent;
     const original = div.dataset.original;
@@ -971,7 +1256,6 @@ export async function commitTextEdits(pdfBytes, pageNum) {
     const bold = div.dataset.bold === 'true';
     const italic = div.dataset.italic === 'true';
 
-    // Changed if text differs OR formatting was modified
     const hasTextChange = newText !== original;
     const origStyle = detectFontStyle(div.dataset.fontName);
     const hasFormatChange = fontSizeOverride || colorOverride || fontFamilyOverride ||
@@ -979,7 +1263,6 @@ export async function commitTextEdits(pdfBytes, pageNum) {
 
     if (!hasTextChange && !hasFormatChange) continue;
 
-    // Use matched color when re-drawing changed text (preserves original color)
     const effectiveColor = colorOverride || matchedColor || '';
 
     changes.push({
@@ -996,6 +1279,27 @@ export async function commitTextEdits(pdfBytes, pageNum) {
       bold,
       italic,
     });
+  }
+
+  // Collect changes from previously deactivated blocks
+  for (const [, savedLines] of _editedBlocks) {
+    for (const saved of savedLines) {
+      if (!saved.dirty) continue;
+      changes.push({
+        newText: saved.text,
+        pdfX: saved.pdfX,
+        pdfY: saved.pdfY,
+        pdfFontSize: saved.pdfFontSize,
+        pdfLineWidth: saved.pdfLineWidth,
+        fontName: saved.fontName,
+        screenWidth: saved.screenWidth,
+        screenHeight: saved.screenHeight,
+        fontSizeOverride: saved.fontSizeOverride,
+        colorOverride: saved.colorOverride || saved.matchedColor || '',
+        bold: saved.bold,
+        italic: saved.italic,
+      });
+    }
   }
 
   if (changes.length === 0) return null;

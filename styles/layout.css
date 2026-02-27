@@ -804,7 +804,13 @@ html, body {
   border-radius: 3px;
 }
 
-/* Drop indicators for drag-and-drop page insertion */
+/* Dragging state for page reorder */
+.thumbnail-item.dragging {
+  opacity: 0.4;
+  transform: scale(0.95);
+}
+
+/* Drop indicators for drag-and-drop page reorder/insertion */
 .thumbnail-item.drop-before {
   box-shadow: 0 -3px 0 0 var(--mb-brand);
   margin-top: 3px;
@@ -1014,38 +1020,65 @@ html, body {
 
 /* ── Text Edit Mode ── */
 
+/* Override text-layer opacity so edit overlays are fully opaque */
+#text-layer.text-edit-active {
+  opacity: 1;
+}
+
+/* Click zones for single-block editing — transparent hover targets */
+.text-edit-block-zone {
+  border: 1px dashed transparent;
+  border-radius: 3px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.text-edit-block-zone:hover {
+  border-color: rgba(41, 128, 185, 0.4);
+  background: rgba(41, 128, 185, 0.05);
+}
+.text-edit-zone-dirty {
+  border-color: rgba(234, 179, 8, 0.4);
+  background: rgba(234, 179, 8, 0.05);
+}
+.text-edit-zone-dirty:hover {
+  border-color: rgba(234, 179, 8, 0.6);
+  background: rgba(234, 179, 8, 0.08);
+}
+
 .text-edit-line {
   position: absolute;
-  outline: 1px solid transparent;
-  background: transparent;
-  padding: 0 2px;
+  outline: 2px solid rgba(41, 128, 185, 0.35);
+  background: white;
+  padding: 4px 6px;
   cursor: text;
   z-index: 15;
-  white-space: pre;
-  min-width: 20px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-width: 40px;
+  min-height: 1em;
   box-sizing: border-box;
+  overflow: hidden;
+  resize: both;
   /* font-family is set inline from PDF font detection */
   color: var(--mb-text);
-  border-radius: 2px;
-  transition: outline-color 0.15s, background 0.15s, box-shadow 0.15s;
+  border-radius: 3px;
 }
 .text-edit-line:hover {
-  outline-color: rgba(41, 128, 185, 0.4);
-  background: rgba(255, 255, 255, 0.5);
+  outline: 2px solid rgba(41, 128, 185, 0.6);
+  background: #f8fbff;
 }
 .text-edit-line:focus {
   outline: 2px solid var(--mb-accent);
-  background: rgba(255, 255, 255, 0.95);
+  background: white;
   box-shadow: 0 0 0 3px rgba(41, 128, 185, 0.15);
 }
 /* Visual indicator for modified lines */
 .text-edit-line.text-edit-dirty {
   outline-color: rgba(234, 179, 8, 0.5);
-  background: rgba(253, 224, 71, 0.08);
+  background: #fffde6;
 }
 .text-edit-line.text-edit-dirty:focus {
   outline-color: var(--mb-accent);
-  background: rgba(255, 255, 255, 0.95);
+  background: white;
 }
 
 /* Paragraph grouping indicator — vertical bar to show grouped lines */
@@ -2132,17 +2165,19 @@ html, body {
 
 /* ── Dark Mode Overrides ── */
 
+/* PDF pages are always white — edit overlays must be opaque regardless of theme */
 html[data-theme="dark"] .text-edit-line {
-  color: var(--mb-text);
+  background: white;
+  color: #000;
 }
 html[data-theme="dark"] .text-edit-line:hover {
-  background: rgba(30, 30, 30, 0.5);
+  background: #f0f7ff;
 }
 html[data-theme="dark"] .text-edit-line:focus {
-  background: rgba(30, 30, 30, 0.95);
+  background: white;
 }
 html[data-theme="dark"] .text-edit-line.text-edit-dirty {
-  background: rgba(234, 179, 8, 0.08);
+  background: #fffde6;
 }
 html[data-theme="dark"] .text-edit-paragraph {
   background: var(--mb-accent);

@@ -645,12 +645,25 @@ function generateThumbnails() {
     const item = document.createElement('div');
     item.className = 'thumbnail-item' + (i === State.currentPage ? ' active' : '');
     item.dataset.page = i;
+    item.draggable = true;
     item.innerHTML = `
       <div class="thumbnail-placeholder">${i}</div>
       <span class="page-number">${getPageLabel(i)}</span>
     `;
     item.addEventListener('click', () => goToPage(i));
     item.addEventListener('contextmenu', e => showContextMenu(e, i));
+
+    // Drag-to-reorder
+    item.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('application/x-mudbrick-page', String(i));
+      e.dataTransfer.effectAllowed = 'move';
+      item.classList.add('dragging');
+    });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      clearDropIndicators();
+    });
+
     DOM.thumbnailList.appendChild(item);
   }
 
@@ -2644,6 +2657,12 @@ function wireEvents() {
   // Edit Text
   DOM.btnEditText.addEventListener('click', handleEditText);
 
+  // Double-click on text layer enters edit mode
+  DOM.textLayer.addEventListener('dblclick', () => {
+    if (!State.pdfDoc || isTextEditActive()) return;
+    handleEditText();
+  });
+
   // Edit Image
   if (DOM.btnEditImage) DOM.btnEditImage.addEventListener('click', handleEditImage);
 
@@ -3157,11 +3176,11 @@ function wireEvents() {
     }
   });
 
-  // Drag-and-drop on sidebar thumbnail list — insert pages at drop position
+  // Drag-and-drop on sidebar thumbnail list — reorder pages or insert from files
   DOM.thumbnailList.addEventListener('dragover', e => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    // Highlight drop target between thumbnails
+    const isReorder = e.dataTransfer.types.includes('application/x-mudbrick-page');
+    e.dataTransfer.dropEffect = isReorder ? 'move' : 'copy';
     const target = getDropTarget(e);
     clearDropIndicators();
     if (target.item) {
@@ -3169,14 +3188,56 @@ function wireEvents() {
     }
   });
   DOM.thumbnailList.addEventListener('dragleave', e => {
-    // Only clear if leaving the thumbnail list entirely
     if (!DOM.thumbnailList.contains(e.relatedTarget)) {
       clearDropIndicators();
     }
   });
-  DOM.thumbnailList.addEventListener('drop', e => {
+  DOM.thumbnailList.addEventListener('drop', async e => {
     e.preventDefault();
     clearDropIndicators();
+
+    // Internal page reorder
+    const pageData = e.dataTransfer.getData('application/x-mudbrick-page');
+    if (pageData && State.pdfDoc) {
+      const fromPage = parseInt(pageData);  // 1-based
+      const target = getDropTarget(e);
+      if (!target.item) return;
+      let toPage = parseInt(target.item.dataset.page);
+      if (target.position === 'after') toPage += 1;
+      // Convert to 0-based indices for reorderPages
+      const fromIdx = fromPage - 1;
+      let toIdx = toPage - 1;
+      if (fromIdx === toIdx || fromIdx === toIdx - 1) return; // no-op
+      // Adjust toIdx: when moving forward, account for removal shift
+      if (fromIdx < toIdx) toIdx -= 1;
+      try {
+        showLoading('Reordering pages…');
+        const newBytes = await reorderPages(State.pdfBytes, fromIdx, toIdx);
+        // Update current page tracking
+        let newCurrent = State.currentPage;
+        if (State.currentPage === fromPage) {
+          newCurrent = toIdx + 1;
+        } else {
+          // Shift current page if affected by the move
+          if (fromPage < State.currentPage && toIdx + 1 >= State.currentPage) {
+            newCurrent = State.currentPage - 1;
+          } else if (fromPage > State.currentPage && toIdx + 1 <= State.currentPage) {
+            newCurrent = State.currentPage + 1;
+          }
+        }
+        State.currentPage = newCurrent;
+        await reloadAfterEdit(newBytes);
+        toast('Page reordered', 'success');
+      } catch (err) {
+        console.warn('Page reorder failed:', err);
+        toast('Page reorder failed: ' + err.message, 'error');
+      } finally {
+        hideLoading();
+      }
+      return;
+    }
+
+    // External file drop — insert pages
     const files = Array.from(e.dataTransfer.files).filter(f =>
       f.name.toLowerCase().endsWith('.pdf') ||
       f.type.startsWith('image/') ||
@@ -3184,19 +3245,14 @@ function wireEvents() {
     );
     if (!files.length || !State.pdfDoc) return;
 
-    // Determine insertion point from drop position
     const target = getDropTarget(e);
     let insertAfter;
     if (target.item) {
       const pageNum = parseInt(target.item.dataset.page);
       insertAfter = target.position === 'before' ? pageNum - 2 : pageNum - 1;
-      // Clamp: -1 means insert at very beginning (before page 1)
       if (insertAfter < -1) insertAfter = -1;
     }
-    // insertAfter === undefined → append at end
-    // insertAfter === -1 → insert before first page (index 0)
     if (insertAfter === -1) {
-      // Special case: insert at the beginning
       handleAddPages(files, -1);
     } else {
       handleAddPages(files, insertAfter);
