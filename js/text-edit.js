@@ -488,14 +488,32 @@ function groupIntoLines(items, viewport) {
     };
   });
 
+  // Deduplicate overlapping text items — after cover-and-replace edits, the PDF
+  // contains both the original (hidden) text and the new text at the same position.
+  // Keep only the last item at each position (the edited version drawn on top).
+  const deduped = [];
+  const seen = new Map(); // key -> index in deduped
+  for (const item of mapped) {
+    if (!item.str.trim()) continue;
+    // Key by approximate position (round to 1px)
+    const key = `${Math.round(item.left)},${Math.round(item.top)}`;
+    if (seen.has(key)) {
+      // Replace earlier item with this one (later in PDF = drawn on top)
+      deduped[seen.get(key)] = item;
+    } else {
+      seen.set(key, deduped.length);
+      deduped.push(item);
+    }
+  }
+
   // Detect column layout and partition items
-  const splitX = detectColumnSplit(mapped, viewport.width);
+  const splitX = detectColumnSplit(deduped, viewport.width);
   let columns;
   if (splitX === null) {
-    columns = [mapped]; // single-column page
+    columns = [deduped]; // single-column page
   } else {
     const left = [], right = [];
-    for (const item of mapped) {
+    for (const item of deduped) {
       if (!item.str.trim()) continue;
       const center = item.left + item.width / 2;
       (center < splitX ? left : right).push(item);
@@ -771,6 +789,17 @@ function activateBlock(paraIdx) {
   shield.addEventListener('mousedown', e => e.stopPropagation());
   editContainer.appendChild(shield);
 
+  // Pre-sample colors from the canvas BEFORE erasing — once erased,
+  // sampleTextColor would read the background instead of the actual text color.
+  const savedEdits = _editedBlocks.get(paraIdx);
+  const preSampled = para.map((line, li) => {
+    const saved = savedEdits ? savedEdits[li] : null;
+    return {
+      textColor: saved?.matchedColor || sampleTextColor(_pdfCanvas, line.left, line.top, line.width, line.height),
+      bgColor: saved?.bgColor || sampleBackgroundColor(_pdfCanvas, line.left, line.top, line.width, line.height),
+    };
+  });
+
   // Save canvas snapshot for this block area and erase original text from canvas
   // so the transparent overlay doesn't create ghost/double text
   _canvasSnapshot = null;
@@ -778,7 +807,6 @@ function activateBlock(paraIdx) {
     try {
       const ctx = _pdfCanvas.getContext('2d');
       const dpr = _pdfCanvas.width / (parseFloat(_pdfCanvas.style.width) || _pdfCanvas.offsetWidth) || 1;
-      // getImageData/putImageData work in raw canvas pixels (ignoring transform)
       const snapX = Math.max(0, Math.floor((paraLeft - 6) * dpr));
       const snapY = Math.max(0, Math.floor((paraTop - 6) * dpr));
       const snapW = Math.min(Math.ceil((paraRight - paraLeft + 12) * dpr), _pdfCanvas.width - snapX);
@@ -788,14 +816,12 @@ function activateBlock(paraIdx) {
           imageData: ctx.getImageData(snapX, snapY, snapW, snapH),
           x: snapX, y: snapY,
         };
-        // Paint over each line's text on the canvas with sampled background color.
-        // Reset transform to identity so fillRect uses raw pixel coords directly,
-        // avoiding double-scaling from the DPR transform left by renderPage.
+        // Paint over each line's text using identity transform (raw pixel coords)
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        for (const line of para) {
-          const bg = sampleBackgroundColor(_pdfCanvas, line.left, line.top, line.width, line.height);
-          ctx.fillStyle = bg;
+        for (let i = 0; i < para.length; i++) {
+          const line = para[i];
+          ctx.fillStyle = preSampled[i].bgColor;
           ctx.fillRect(
             Math.floor((line.left - 1) * dpr),
             Math.floor((line.top - 1) * dpr),
@@ -807,9 +833,6 @@ function activateBlock(paraIdx) {
       }
     } catch (_) { /* canvas security or other error */ }
   }
-
-  // Check if this block has previously saved edits
-  const savedEdits = _editedBlocks.get(paraIdx);
 
   for (let li = 0; li < para.length; li++) {
     const line = para[li];
@@ -837,19 +860,14 @@ function activateBlock(paraIdx) {
     if (fontStyle.bold) div.style.fontWeight = 'bold';
     if (fontStyle.italic) div.style.fontStyle = 'italic';
 
-    // Color
-    const matchedColor = saved?.matchedColor || sampleTextColor(
-      _pdfCanvas, line.left, line.top, line.width, line.height
-    );
+    // Color — use pre-sampled values (sampled before canvas erase)
+    const matchedColor = preSampled[li].textColor;
     div.style.color = saved?.colorOverride || matchedColor;
     div.dataset.matchedColor = matchedColor;
 
     // Background — transparent so the original PDF canvas shows through unchanged
     div.style.background = 'transparent';
-    // Sample bg color for commit-time cover rectangle (exact pixel from edge)
-    const bgColor = saved?.bgColor || sampleBackgroundColor(
-      _pdfCanvas, line.left, line.top, line.width, line.height
-    );
+    const bgColor = preSampled[li].bgColor;
     div.dataset.bgColor = bgColor;
 
     // Store original data
