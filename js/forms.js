@@ -163,6 +163,8 @@ export function renderFormOverlay(pageContainer, fields, pdfLibDoc, pageIndex, z
       // Restore previously filled value
       if (formFieldValues[fieldDesc.name] !== undefined) {
         setElementValue(el, fieldDesc.type, formFieldValues[fieldDesc.name]);
+        // Trigger background sync for restored values
+        el.dispatchEvent(new Event('input'));
       }
 
       // Save value on change
@@ -179,16 +181,26 @@ export function renderFormOverlay(pageContainer, fields, pdfLibDoc, pageIndex, z
 }
 
 function createFieldElement(fieldDesc, w, h) {
+  const emptyBg = 'rgba(200, 220, 255, 0.15)';
+  const filledBg = 'rgba(255, 255, 255, 1)';
   const baseStyle = `
     font-family: Helvetica, Arial, sans-serif;
     font-size: ${Math.max(10, Math.min(h * 0.6, 16))}px;
     box-sizing: border-box;
     border: 1.5px solid rgba(0, 100, 255, 0.4);
     border-radius: 2px;
-    background: rgba(200, 220, 255, 0.15);
+    background: ${emptyBg};
     outline: none;
     padding: 2px 4px;
   `;
+
+  // Toggle background to opaque white when field has content (or is focused)
+  // so original PDF text (underlines, labels) underneath doesn't bleed through.
+  function syncBg(el) {
+    const hasVal = el.value && el.value.trim().length > 0;
+    const isFocused = document.activeElement === el;
+    el.style.background = (hasVal || isFocused) ? filledBg : emptyBg;
+  }
 
   switch (fieldDesc.type) {
     case 'text': {
@@ -198,6 +210,11 @@ function createFieldElement(fieldDesc, w, h) {
       input.placeholder = fieldDesc.name;
       input.style.cssText = baseStyle;
       if (fieldDesc.maxLength) input.maxLength = fieldDesc.maxLength;
+      // Opaque background when field has content or is focused
+      syncBg(input);
+      input.addEventListener('input', () => syncBg(input));
+      input.addEventListener('focus', () => syncBg(input));
+      input.addEventListener('blur', () => syncBg(input));
       return input;
     }
     case 'checkbox': {
@@ -234,6 +251,8 @@ function createFieldElement(fieldDesc, w, h) {
       if (fieldDesc.value?.length > 0) {
         sel.value = fieldDesc.value[0];
       }
+      syncBg(sel);
+      sel.addEventListener('change', () => syncBg(sel));
       return sel;
     }
     case 'radio': {
@@ -247,6 +266,8 @@ function createFieldElement(fieldDesc, w, h) {
         sel.appendChild(optEl);
       });
       if (fieldDesc.value) sel.value = fieldDesc.value;
+      syncBg(sel);
+      sel.addEventListener('change', () => syncBg(sel));
       return sel;
     }
     default:

@@ -200,7 +200,9 @@ function mapToStandardFont(fontName) {
     return 'Courier';
   }
 
-  if (lower.includes('times') || lower.includes('serif') || lower.includes('roman')) {
+  // "sans-serif" → Helvetica; "serif" (without "sans") → TimesRoman
+  if (lower.includes('times') || lower.includes('roman') ||
+      (lower.includes('serif') && !lower.includes('sans'))) {
     if (lower.includes('bold') && lower.includes('italic')) return 'TimesRomanBoldItalic';
     if (lower.includes('bold')) return 'TimesRomanBold';
     if (lower.includes('italic')) return 'TimesRomanItalic';
@@ -249,6 +251,28 @@ function detectFontStyle(fontName) {
   return {
     bold: lower.includes('bold') || lower.includes('heavy') || lower.includes('black'),
     italic: lower.includes('italic') || lower.includes('oblique'),
+  };
+}
+
+/**
+ * Detect font weight and style from PDF style metadata and font name.
+ * Prefer explicit style metadata when available, then fall back to name parsing.
+ */
+function detectFontStyleWithMeta(fontName, styleInfo) {
+  const lowerWeight = String(styleInfo?.fontWeight || '').toLowerCase();
+  const lowerStyle = String(styleInfo?.fontStyle || '').toLowerCase();
+  const lowerFamily = String(styleInfo?.fontFamily || '').toLowerCase();
+  const fromMeta = {
+    bold: lowerWeight === 'bold' || lowerWeight === '700' || lowerWeight === '800' || lowerWeight === '900' ||
+      lowerFamily.includes('bold'),
+    italic: lowerStyle === 'italic' || lowerStyle === 'oblique' ||
+      lowerFamily.includes('italic') || lowerFamily.includes('oblique'),
+  };
+  if (fromMeta.bold || fromMeta.italic) return fromMeta;
+  const fromName = detectFontStyle(fontName);
+  return {
+    bold: fromName.bold,
+    italic: fromName.italic,
   };
 }
 
@@ -480,22 +504,25 @@ function groupIntoLines(items, viewport, styles) {
     const left = tx[4];
     const top = tx[5] - fontSize;
 
-    // Resolve the best font name for bold/italic detection and standard font mapping.
+    // Resolve the best font name for standard font mapping.
     // pdf.js fontName can be synthetic (e.g. "g_d0_f1") or real (e.g. "BCDFEE+ArialMT-Bold").
     // styles.fontFamily can be a real name or a CSS generic ("sans-serif", "serif").
-    // Use whichever contains more useful info (bold/italic keywords).
     const styleInfo = styles && styles[item.fontName];
     const familyName = (styleInfo && styleInfo.fontFamily) || '';
     const rawName = item.fontName || '';
-    // Prefer whichever name contains style keywords; fall back to the longer name
     const hasStyleInfo = (n) => /bold|italic|oblique|heavy|black|light|medium/i.test(n);
+    // Check if rawName contains a recognizable font family (not just a synthetic id)
+    const hasRecognizableFont = (n) => /times|arial|helvetica|courier|roman|georgia|verdana|tahoma|trebuchet|palatino|garamond|mono|sans|serif/i.test(n);
+    // Prefer names with style keywords first, then recognizable font names, then familyName
     const resolvedFontName = hasStyleInfo(rawName) ? rawName
       : hasStyleInfo(familyName) ? familyName
-      : (rawName.length > familyName.length ? rawName : familyName) || 'Helvetica';
+      : hasRecognizableFont(rawName) ? rawName
+      : familyName || rawName || 'Helvetica';
 
     return {
       str: item.str,
       fontName: resolvedFontName,
+      styleInfo: styleInfo || null,
       left,
       top,
       width: item.width * viewport.scale,
@@ -667,12 +694,6 @@ export async function enterTextEditMode(pageNum, pdfDoc, viewport, container, pd
     textContent = { items: [] };
   }
   const lines = groupIntoLines(textContent.items, viewport, textContent.styles);
-
-  // Debug: log resolved font names for first few lines
-  for (const line of lines.slice(0, 5)) {
-    const style = detectFontStyle(line.fontName);
-    console.log(`[Mudbrick edit] text="${line.text.substring(0, 40)}" fontName="${line.fontName}" bold=${style.bold} italic=${style.italic}`);
-  }
 
   if (lines.length === 0) {
     // Try OCR results for scanned pages
@@ -881,7 +902,14 @@ function activateBlock(paraIdx) {
 
     // Match PDF font visually
     const cssFont = saved?.cssFont || mapToCSSFont(line.fontName);
-    const fontStyle = saved ? { bold: saved.bold, italic: saved.italic } : detectFontStyle(line.fontName);
+    const nameStyle = detectFontStyleWithMeta(line.fontName, line.styleInfo);
+    // Use style metadata/font name only for default bold/italic.
+    const baseStyle = saved
+      ? { bold: !!saved.bold, italic: !!saved.italic }
+      : { bold: nameStyle.bold, italic: nameStyle.italic };
+    const fontStyle = saved
+      ? { bold: saved.bold, italic: saved.italic }
+      : { bold: nameStyle.bold, italic: nameStyle.italic };
     div.style.fontFamily = cssFont;
     if (fontStyle.bold) div.style.fontWeight = 'bold';
     if (fontStyle.italic) div.style.fontStyle = 'italic';
@@ -903,6 +931,8 @@ function activateBlock(paraIdx) {
     div.dataset.pdfFontSize = line.pdfFontSize;
     div.dataset.pdfLineWidth = line.pdfLineWidth || '';
     div.dataset.fontName = line.fontName || '';
+    div.dataset.baseBold = baseStyle.bold ? 'true' : '';
+    div.dataset.baseItalic = baseStyle.italic ? 'true' : '';
     div.dataset.cssFont = cssFont;
     div.dataset.width = line.width;
     div.dataset.height = line.height;
@@ -916,6 +946,9 @@ function activateBlock(paraIdx) {
     div.dataset.fontNameOverride = saved?.fontNameOverride || '';
     div.dataset.bold = fontStyle.bold ? 'true' : '';
     div.dataset.italic = fontStyle.italic ? 'true' : '';
+    // Store initial bold/italic so change detection compares against activation state.
+    div.dataset.initialBold = baseStyle.bold ? 'true' : '';
+    div.dataset.initialItalic = baseStyle.italic ? 'true' : '';
 
     // Mark as dirty if previously edited
     if (saved?.dirty) markDirty(div);
@@ -944,7 +977,14 @@ function activateBlock(paraIdx) {
       markDirty(div);
     });
     div.addEventListener('blur', () => {
-      if (_focusedLine === div) _focusedLine = null;
+      // Don't clear _focusedLine if focus moved to the toolbar (e.g. select dropdown)
+      // Use requestAnimationFrame so document.activeElement has updated
+      requestAnimationFrame(() => {
+        if (_focusedLine !== div) return;
+        const ae = document.activeElement;
+        if (toolbar && toolbar.contains(ae)) return; // focus went to toolbar
+        _focusedLine = null;
+      });
     });
 
     editContainer.appendChild(div);
@@ -981,21 +1021,31 @@ function deactivateBlock() {
     const colorOverride = div.dataset.colorOverride;
     const fontFamilyOverride = div.dataset.fontFamilyOverride;
     const fontNameOverride = div.dataset.fontNameOverride;
-    const origStyle = detectFontStyle(div.dataset.fontName);
     const bold = div.dataset.bold === 'true';
     const italic = div.dataset.italic === 'true';
+    // Compare against initial activation state to determine explicit user toggles.
+    const initialBold = div.dataset.initialBold === 'true';
+    const initialItalic = div.dataset.initialItalic === 'true';
     const hasTextChange = newText !== original;
     const hasFormatChange = fontSizeOverride || colorOverride || fontFamilyOverride ||
-      bold !== origStyle.bold || italic !== origStyle.italic;
+      bold !== initialBold || italic !== initialItalic;
 
     if (hasTextChange || hasFormatChange || isDirty) hasDirty = true;
+
+    // For commit: use metadata-derived bold/italic unless user explicitly toggled.
+    const userChangedBold = bold !== initialBold;
+    const userChangedItalic = italic !== initialItalic;
+    const baseBold = div.dataset.baseBold === 'true';
+    const baseItalic = div.dataset.baseItalic === 'true';
+    const commitBold = userChangedBold ? bold : baseBold;
+    const commitItalic = userChangedItalic ? italic : baseItalic;
 
     savedLines.push({
       text: newText,
       matchedColor: div.dataset.matchedColor,
       cssFont: div.dataset.cssFont,
-      bold,
-      italic,
+      bold: commitBold,
+      italic: commitItalic,
       fontSizeOverride: fontSizeOverride ? parseFloat(fontSizeOverride) : 0,
       colorOverride: colorOverride || '',
       fontFamilyOverride: fontFamilyOverride || '',
@@ -1286,6 +1336,18 @@ function createToolbar(container) {
   toolbar.querySelector('.text-edit-redo').addEventListener('click', performRedo);
   updateUndoButtons();
 
+  // Prevent toolbar buttons from stealing focus from the contenteditable line.
+  // Without this, clicking Bold/Italic/etc. fires blur on the focused line,
+  // setting _focusedLine = null before the click handler can read it.
+  toolbar.addEventListener('mousedown', (e) => {
+    // Allow selects and color inputs to receive focus (they need it to open),
+    // but prevent buttons from stealing focus.
+    const tag = e.target.tagName;
+    if (tag !== 'SELECT' && tag !== 'INPUT') {
+      e.preventDefault();
+    }
+  });
+
   const parent = container.parentElement || container;
   parent.appendChild(toolbar);
 }
@@ -1344,8 +1406,8 @@ async function handleFontUpload(fontFamilySelect) {
 function markDirty(div) {
   const hasTextChange = div.textContent !== div.dataset.original;
   const hasFormatChange = div.dataset.fontSizeOverride || div.dataset.colorOverride ||
-    div.dataset.fontFamilyOverride || div.dataset.bold !== (detectFontStyle(div.dataset.fontName).bold ? 'true' : '') ||
-    div.dataset.italic !== (detectFontStyle(div.dataset.fontName).italic ? 'true' : '');
+    div.dataset.fontFamilyOverride || div.dataset.bold !== (div.dataset.initialBold || '') ||
+    div.dataset.italic !== (div.dataset.initialItalic || '');
   div.classList.toggle('text-edit-dirty', hasTextChange || !!hasFormatChange);
   updateEditCount();
 }
@@ -1416,11 +1478,20 @@ export async function commitTextEdits(pdfBytes, pageNum) {
     const italic = div.dataset.italic === 'true';
 
     const hasTextChange = newText !== original;
-    const origStyle = detectFontStyle(div.dataset.fontName);
+    const initialBold = div.dataset.initialBold === 'true';
+    const initialItalic = div.dataset.initialItalic === 'true';
+    const userChangedBold = bold !== initialBold;
+    const userChangedItalic = italic !== initialItalic;
     const hasFormatChange = fontSizeOverride || colorOverride || fontFamilyOverride ||
-      bold !== origStyle.bold || italic !== origStyle.italic;
+      userChangedBold || userChangedItalic;
 
     if (!hasTextChange && !hasFormatChange) continue;
+
+    // For commit: use metadata-derived bold/italic unless user explicitly toggled.
+    const baseBold = div.dataset.baseBold === 'true';
+    const baseItalic = div.dataset.baseItalic === 'true';
+    const commitBold = userChangedBold ? bold : baseBold;
+    const commitItalic = userChangedItalic ? italic : baseItalic;
 
     const effectiveColor = colorOverride || matchedColor || '';
 
@@ -1435,8 +1506,8 @@ export async function commitTextEdits(pdfBytes, pageNum) {
       screenHeight: parseFloat(div.dataset.height),
       fontSizeOverride,
       colorOverride: effectiveColor,
-      bold,
-      italic,
+      bold: commitBold,
+      italic: commitItalic,
       bgColor: div.dataset.bgColor || '#ffffff',
     });
   }
@@ -1501,7 +1572,6 @@ export async function commitTextEdits(pdfBytes, pageNum) {
     const x = change.pdfX;
     const y = change.pdfY;
 
-    console.log(`[Mudbrick commit] text="${change.newText.substring(0, 30)}" font="${change.fontName}" bold=${change.bold} color="${change.colorOverride}" bg="${change.bgColor}" size=${fontSize}`);
 
     // Use precise PDF line width when available, fall back to screen-based estimate
     const scale = currentViewport ? currentViewport.scale : 1;
