@@ -76,7 +76,7 @@ function sampleBackgroundColor(canvas, x, y, width, height) {
  * Scans pixels and returns the most common non-background color as a hex string.
  * Falls back to #000000 if no distinct color is found.
  */
-function sampleTextColor(canvas, x, y, width, height) {
+function sampleTextColor(canvas, x, y, width, height, bgHex) {
   if (!canvas) return '#000000';
   const ctx = canvas.getContext('2d');
   const dpr = canvas.width / (parseFloat(canvas.style.width) || canvas.offsetWidth) || 1;
@@ -94,21 +94,33 @@ function sampleTextColor(canvas, x, y, width, height) {
     return '#000000';
   }
 
-  // Count dark pixel colors (skip near-white background pixels)
+  // Determine background luminance to use as filter threshold.
+  // On gray backgrounds (lum ~200), the old fixed threshold of 230 let
+  // background pixels through, outnumbering actual text pixels.
+  let bgLum = 230; // default: skip near-white only
+  if (bgHex && bgHex.length === 7) {
+    const bgR = parseInt(bgHex.slice(1, 3), 16);
+    const bgG = parseInt(bgHex.slice(3, 5), 16);
+    const bgB = parseInt(bgHex.slice(5, 7), 16);
+    bgLum = bgR * 0.299 + bgG * 0.587 + bgB * 0.114;
+  }
+  // Skip any pixel within 40 luminance units of the background
+  const skipThreshold = bgLum - 40;
+
+  // Count dark pixel colors (text), skipping background-like pixels
   const colorCounts = {};
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
-    if (a < 128) continue; // skip transparent
-    // Skip near-white (background) pixels — luminance > 230
+    if (a < 128) continue;
     const lum = r * 0.299 + g * 0.587 + b * 0.114;
-    if (lum > 230) continue;
-    // Quantize to reduce noise (round to nearest 8)
-    const qr = (r >> 3) << 3, qg = (g >> 3) << 3, qb = (b >> 3) << 3;
+    if (lum > skipThreshold) continue;
+    // Quantize to reduce noise (round to nearest 4)
+    const qr = (r >> 2) << 2, qg = (g >> 2) << 2, qb = (b >> 2) << 2;
     const key = `${qr},${qg},${qb}`;
     colorCounts[key] = (colorCounts[key] || 0) + 1;
   }
 
-  // Find the most frequent color
+  // Find the most frequent dark color
   let maxCount = 0, bestColor = null;
   for (const [key, count] of Object.entries(colorCounts)) {
     if (count > maxCount) {
@@ -118,16 +130,7 @@ function sampleTextColor(canvas, x, y, width, height) {
   }
 
   if (!bestColor) return '#000000';
-  let [r, g, b] = bestColor.split(',').map(Number);
-  // Ensure minimum readability on white background: if the color is too light
-  // (luminance > 180), darken it proportionally so text is always legible.
-  const lum = r * 0.299 + g * 0.587 + b * 0.114;
-  if (lum > 180) {
-    const scale = 180 / lum;
-    r = Math.round(r * scale);
-    g = Math.round(g * scale);
-    b = Math.round(b * scale);
-  }
+  const [r, g, b] = bestColor.split(',').map(Number);
   return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
 }
 
@@ -796,13 +799,14 @@ function activateBlock(paraIdx) {
 
   // Pre-sample colors from the canvas BEFORE erasing — once erased,
   // sampleTextColor would read the background instead of the actual text color.
+  // Sample background first, then pass it to text color sampler so it can
+  // skip background-colored pixels (critical for gray table cell backgrounds).
   const savedEdits = _editedBlocks.get(paraIdx);
   const preSampled = para.map((line, li) => {
     const saved = savedEdits ? savedEdits[li] : null;
-    return {
-      textColor: saved?.matchedColor || sampleTextColor(_pdfCanvas, line.left, line.top, line.width, line.height),
-      bgColor: saved?.bgColor || sampleBackgroundColor(_pdfCanvas, line.left, line.top, line.width, line.height),
-    };
+    const bgColor = saved?.bgColor || sampleBackgroundColor(_pdfCanvas, line.left, line.top, line.width, line.height);
+    const textColor = saved?.matchedColor || sampleTextColor(_pdfCanvas, line.left, line.top, line.width, line.height, bgColor);
+    return { textColor, bgColor };
   });
 
   // Save canvas snapshot for this block area and erase original text from canvas
