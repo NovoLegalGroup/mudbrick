@@ -29,6 +29,55 @@ function escapeHtml(str) {
 }
 
 /**
+ * Sample the dominant background color from a rendered PDF canvas at the given region.
+ * Returns the most common light/bright color as a hex string, or '#ffffff' if not found.
+ * Expands the sample region slightly beyond the text to get surrounding background.
+ */
+function sampleBackgroundColor(canvas, x, y, width, height) {
+  if (!canvas) return '#ffffff';
+  const ctx = canvas.getContext('2d');
+  // Expand region to sample surrounding background, not just text pixels
+  const pad = 4;
+  const sx = Math.max(0, Math.round(x) - pad);
+  const sy = Math.max(0, Math.round(y) - pad);
+  const sw = Math.min(Math.round(width) + pad * 2, canvas.width - sx);
+  const sh = Math.min(Math.round(height) + pad * 2, canvas.height - sy);
+  if (sw <= 0 || sh <= 0) return '#ffffff';
+
+  let data;
+  try {
+    data = ctx.getImageData(sx, sy, sw, sh).data;
+  } catch (_) {
+    return '#ffffff';
+  }
+
+  // Count light pixel colors (the background), skip dark pixels (text/lines)
+  const colorCounts = {};
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+    if (a < 128) continue;
+    const lum = r * 0.299 + g * 0.587 + b * 0.114;
+    if (lum < 180) continue; // skip dark pixels (text, borders)
+    // Quantize to reduce noise
+    const qr = (r >> 3) << 3, qg = (g >> 3) << 3, qb = (b >> 3) << 3;
+    const key = `${qr},${qg},${qb}`;
+    colorCounts[key] = (colorCounts[key] || 0) + 1;
+  }
+
+  let maxCount = 0, bestColor = null;
+  for (const [key, count] of Object.entries(colorCounts)) {
+    if (count > maxCount) {
+      maxCount = count;
+      bestColor = key;
+    }
+  }
+
+  if (!bestColor) return '#ffffff';
+  const [r, g, b] = bestColor.split(',').map(Number);
+  return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
+}
+
+/**
  * Sample the dominant text color from a rendered PDF canvas at the given region.
  * Scans pixels and returns the most common non-background color as a hex string.
  * Falls back to #000000 if no distinct color is found.
@@ -475,7 +524,7 @@ function groupIntoLines(items, viewport) {
         // Same Y — check horizontal gap to detect table cell boundaries
         const lastItem = currentLine.items[currentLine.items.length - 1];
         const gap = item.left - (lastItem.left + lastItem.width);
-        const gapThreshold = Math.max(lastItem.fontSize * 1.5, 20);
+        const gapThreshold = Math.max(lastItem.fontSize * 0.5, 5);
 
         if (gap > gapThreshold) {
           // Large gap — separate cell/segment, start new line
@@ -760,6 +809,13 @@ function activateBlock(paraIdx) {
     div.style.color = saved?.colorOverride || matchedColor;
     div.dataset.matchedColor = matchedColor;
 
+    // Background — sample actual PDF background so we don't paint white over gray cells
+    const bgColor = saved?.bgColor || sampleBackgroundColor(
+      _pdfCanvas, line.left, line.top, line.width, line.height
+    );
+    div.style.background = bgColor;
+    div.dataset.bgColor = bgColor;
+
     // Store original data
     div.dataset.original = line.text;
     div.dataset.pdfX = line.pdfX;
@@ -873,6 +929,7 @@ function deactivateBlock() {
       fontName: fontNameOverride || div.dataset.fontName,
       screenWidth: parseFloat(div.dataset.width),
       screenHeight: parseFloat(div.dataset.height),
+      bgColor: div.dataset.bgColor || '#ffffff',
     });
     div.remove();
   }
@@ -1278,6 +1335,7 @@ export async function commitTextEdits(pdfBytes, pageNum) {
       colorOverride: effectiveColor,
       bold,
       italic,
+      bgColor: div.dataset.bgColor || '#ffffff',
     });
   }
 
@@ -1298,6 +1356,7 @@ export async function commitTextEdits(pdfBytes, pageNum) {
         colorOverride: saved.colorOverride || saved.matchedColor || '',
         bold: saved.bold,
         italic: saved.italic,
+        bgColor: saved.bgColor || '#ffffff',
       });
     }
   }
@@ -1345,13 +1404,20 @@ export async function commitTextEdits(pdfBytes, pageNum) {
     const rectWidth = (change.pdfLineWidth > 0 ? change.pdfLineWidth : change.screenWidth / scale) + 4;
     const rectHeight = change.pdfFontSize * 1.3;  // 1.3x covers ascenders/descenders
 
-    // White cover rectangle — precise positioning
+    // Cover rectangle — match sampled background color so it blends in
+    let coverColor = PDFLib.rgb(1, 1, 1);
+    if (change.bgColor && change.bgColor !== '#ffffff') {
+      const br = parseInt(change.bgColor.slice(1, 3), 16) / 255;
+      const bg = parseInt(change.bgColor.slice(3, 5), 16) / 255;
+      const bb = parseInt(change.bgColor.slice(5, 7), 16) / 255;
+      coverColor = PDFLib.rgb(br, bg, bb);
+    }
     page.drawRectangle({
       x: x - 1,
       y: y - change.pdfFontSize * 0.25,  // extend below baseline for descenders
       width: rectWidth,
       height: rectHeight,
-      color: PDFLib.rgb(1, 1, 1),
+      color: coverColor,
       borderWidth: 0,
     });
 

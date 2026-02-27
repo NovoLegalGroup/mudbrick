@@ -1047,7 +1047,7 @@ html, body {
 .text-edit-line {
   position: absolute;
   outline: 2px solid rgba(41, 128, 185, 0.35);
-  background: white;
+  /* background set inline from sampled PDF background color */
   padding: 4px 6px;
   cursor: text;
   z-index: 15;
@@ -1064,21 +1064,17 @@ html, body {
 }
 .text-edit-line:hover {
   outline: 2px solid rgba(41, 128, 185, 0.6);
-  background: #f8fbff;
 }
 .text-edit-line:focus {
   outline: 2px solid var(--mb-accent);
-  background: white;
   box-shadow: 0 0 0 3px rgba(41, 128, 185, 0.15);
 }
 /* Visual indicator for modified lines */
 .text-edit-line.text-edit-dirty {
   outline-color: rgba(234, 179, 8, 0.5);
-  background: #fffde6;
 }
 .text-edit-line.text-edit-dirty:focus {
   outline-color: var(--mb-accent);
-  background: white;
 }
 
 /* Paragraph grouping indicator — vertical bar to show grouped lines */
