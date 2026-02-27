@@ -462,7 +462,7 @@ function detectColumnSplit(mapped, pageWidth) {
   return ((bestStart + bestEnd) / 2) * bucketWidth;
 }
 
-function groupIntoLines(items, viewport) {
+function groupIntoLines(items, viewport, styles) {
   if (!items.length) return [];
 
   const mapped = items.map(item => {
@@ -474,9 +474,14 @@ function groupIntoLines(items, viewport) {
     const left = tx[4];
     const top = tx[5] - fontSize;
 
+    // Use styles.fontFamily (e.g. "Arial-BoldMT") for reliable bold/italic
+    // detection — the synthetic fontName (e.g. "g_d0_f1") often lacks this info
+    const styleInfo = styles && styles[item.fontName];
+    const resolvedFontName = (styleInfo && styleInfo.fontFamily) || item.fontName;
+
     return {
       str: item.str,
-      fontName: item.fontName,
+      fontName: resolvedFontName,
       left,
       top,
       width: item.width * viewport.scale,
@@ -647,7 +652,7 @@ export async function enterTextEditMode(pageNum, pdfDoc, viewport, container, pd
     console.warn('Text extraction failed (may be encrypted):', err);
     textContent = { items: [] };
   }
-  const lines = groupIntoLines(textContent.items, viewport);
+  const lines = groupIntoLines(textContent.items, viewport, textContent.styles);
 
   if (lines.length === 0) {
     // Try OCR results for scanned pages
