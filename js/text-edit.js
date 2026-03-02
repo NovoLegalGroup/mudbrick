@@ -863,17 +863,19 @@ function activateBlock(paraIdx) {
           imageData: ctx.getImageData(snapX, snapY, snapW, snapH),
           x: snapX, y: snapY,
         };
-        // Paint over each line's text using identity transform (raw pixel coords)
+        // Paint over each line's text using identity transform (raw pixel coords).
+        // Inset by 2px on all sides to avoid erasing nearby borders/box edges.
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         for (let i = 0; i < para.length; i++) {
           const line = para[i];
           ctx.fillStyle = preSampled[i].bgColor;
+          const inset = 2;
           ctx.fillRect(
-            Math.floor((line.left - 1) * dpr),
-            Math.floor((line.top - 1) * dpr),
-            Math.ceil((line.width + 2) * dpr),
-            Math.ceil((line.height + 2) * dpr)
+            Math.floor((line.left + inset) * dpr),
+            Math.floor((line.top + inset) * dpr),
+            Math.ceil((line.width - inset * 2) * dpr),
+            Math.ceil((line.height - inset * 2) * dpr)
           );
         }
         ctx.restore();
