@@ -829,6 +829,15 @@
   <!-- ═══════════════════ Toast Container ═══════════════════ -->
   <div id="toast-container"></div>
 
+  <!-- ═══════════════════ Recovery Banner ═══════════════════ -->
+  <div id="recovery-banner" class="recovery-banner hidden" role="alert">
+    <span id="recovery-message" class="recovery-message"></span>
+    <div class="recovery-actions">
+      <button id="recovery-restore" class="btn btn-sm btn-primary">Recover</button>
+      <button id="recovery-dismiss" class="btn btn-sm">Dismiss</button>
+    </div>
+  </div>
+
   <!-- ═══════════════════ Loading Overlay ═══════════════════ -->
   <div id="loading-overlay" class="hidden" role="alert" aria-live="assertive">
     <div class="spinner"></div>
@@ -1914,7 +1923,47 @@
           })
           .catch(err => console.warn('SW registration failed:', err));
       });
+
+      /* ── Listen for messages from service worker ── */
+      navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data && event.data.type === 'SW_UPDATED') {
+          // SW activated a new version — show update toast
+          const banner = document.createElement('div');
+          banner.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--mb-accent,#c0392b);color:#fff;padding:10px 20px;border-radius:8px;z-index:9999;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;align-items:center;gap:12px;';
+          banner.innerHTML = '<span>Update available \u2014 Refresh</span><button onclick="location.reload()" style="background:#fff;color:var(--mb-accent,#c0392b);border:none;padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:600;">Refresh</button><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer;font-size:16px;">&times;</button>';
+          document.body.appendChild(banner);
+        }
+        if (event.data && event.data.type === 'CACHE_QUOTA_EXCEEDED') {
+          console.warn('Cache storage quota exceeded — some assets may not be cached offline.');
+        }
+      });
     }
+
+    /* ── Offline / Online indicator ── */
+    (function() {
+      let offlineBanner = null;
+
+      function showOffline() {
+        if (offlineBanner) return;
+        offlineBanner = document.createElement('div');
+        offlineBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#e74c3c;color:#fff;text-align:center;padding:4px 12px;font-size:12px;z-index:10000;font-family:system-ui,sans-serif;';
+        offlineBanner.textContent = 'You are offline \u2014 some features may be limited';
+        document.body.appendChild(offlineBanner);
+      }
+
+      function hideOffline() {
+        if (offlineBanner) {
+          offlineBanner.remove();
+          offlineBanner = null;
+        }
+      }
+
+      window.addEventListener('offline', showOffline);
+      window.addEventListener('online', hideOffline);
+
+      // Check initial state
+      if (!navigator.onLine) showOffline();
+    })();
   </script>
 
   <!-- ═══════════════════ App Entry Point (ES Module) ═══════════════════ -->
