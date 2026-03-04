@@ -778,6 +778,10 @@ export async function enterTextEditMode(pageNum, pdfDoc, viewport, container, pd
   container.classList.add('text-edit-active');
   container.querySelectorAll('span').forEach(s => s.style.visibility = 'hidden');
 
+  // Disable fabric canvas wrapper so clicks reach the text-edit layer
+  const fabricWrapper = document.getElementById('fabric-canvas-wrapper');
+  if (fabricWrapper) fabricWrapper.style.pointerEvents = 'none';
+
   // Group lines into paragraphs — store for single-block editing
   _paragraphData = groupIntoParagraphs(lines);
 
@@ -1157,6 +1161,10 @@ export function exitTextEditMode() {
       formOverlay.style.zIndex = '';
       formOverlay.style.pointerEvents = '';
     }
+
+    // Restore fabric canvas wrapper pointer-events
+    const fabricWrapper = document.getElementById('fabric-canvas-wrapper');
+    if (fabricWrapper) fabricWrapper.style.pointerEvents = '';
   }
 
   if (toolbar) {
@@ -2400,6 +2408,7 @@ function matchChangeToOperation(change, textOps) {
 
   // Strategy 2: Text contains/starts-with + close position
   for (const op of textOps) {
+    if (op.text.trim().length < 2) continue; // skip whitespace/trivial ops
     if (Math.abs(op.x - cx) < 8 && Math.abs(op.y - cy) < 8) {
       if (op.text.includes(origText) || origText.includes(op.text)) {
         return op;
@@ -2411,12 +2420,13 @@ function matchChangeToOperation(change, textOps) {
   const exactMatches = textOps.filter(op => op.text === origText);
   if (exactMatches.length === 1) return exactMatches[0];
 
-  // Strategy 4: Closest position match with text overlap
+  // Strategy 4: Closest position match with text overlap (wider tolerance)
   let bestOp = null;
   let bestDist = Infinity;
   for (const op of textOps) {
+    if (op.text.trim().length < 2) continue; // skip whitespace/trivial ops
     const dist = Math.abs(op.x - cx) + Math.abs(op.y - cy);
-    if (dist < 20 && dist < bestDist) {
+    if (dist < 60 && dist < bestDist) {
       // Require at least some text overlap
       if (op.text.length > 0 && origText.length > 0) {
         const shorter = op.text.length < origText.length ? op.text : origText;
@@ -2428,7 +2438,21 @@ function matchChangeToOperation(change, textOps) {
       }
     }
   }
-  return bestOp;
+  if (bestOp) return bestOp;
+
+  // Strategy 5: Text-prefix match (no position constraint) — safe when unique
+  // Handles cases where CTM / coordinate system causes large position discrepancies
+  // between the text layer and the content stream parser.
+  const prefixLen = Math.min(origText.length, 8);
+  if (prefixLen >= 4) {
+    const prefix = origText.slice(0, prefixLen);
+    const prefixMatches = textOps.filter(op =>
+      op.text.length >= 3 && (op.text.startsWith(prefix) || prefix.startsWith(op.text.slice(0, prefixLen)))
+    );
+    if (prefixMatches.length === 1) return prefixMatches[0];
+  }
+
+  return null;
 }
 
 /**
@@ -2660,10 +2684,35 @@ export async function commitTextEdits(pdfBytes, pageNum) {
         'pdfPos=', change.pdfX?.toFixed(1), change.pdfY?.toFixed(1),
         'matched=', op ? `"${op.text.slice(0, 30)}" @(${op.x.toFixed(1)},${op.y.toFixed(1)}) isCID=${op.isCID}` : 'NO MATCH');
       if (op) {
+        // When the original text spans multiple content stream operators (e.g.,
+        // "Re: N" + "-" + "400 Application…"), expand the replacement range to
+        // cover ALL trailing operators on the same line.  This prevents leftover
+        // fragments from rendering alongside the replaced text.
+        let effectiveOp = op;
+        if (op.text.length < change.originalText.length) {
+          const matchIdx = textOps.indexOf(op);
+          if (matchIdx >= 0) {
+            let combinedText = op.text;
+            let lastEndOffset = op.endOffset;
+            for (let k = matchIdx + 1; k < textOps.length; k++) {
+              const nextOp = textOps[k];
+              if (Math.abs(nextOp.y - op.y) >= 2) break; // different line
+              combinedText += nextOp.text;
+              lastEndOffset = nextOp.endOffset;
+              if (combinedText.length >= change.originalText.length) break;
+            }
+            if (combinedText.length > op.text.length) {
+              effectiveOp = { ...op, endOffset: lastEndOffset, text: combinedText };
+              console.log('[commitTextEdits] Expanded op range:',
+                `"${combinedText.slice(0, 40)}" endOffset ${op.endOffset}→${lastEndOffset}`);
+            }
+          }
+        }
+
         // Get the font CMap entry for encoding replacement text
         const fme = fontCMaps.get(op.fontRef);
         // Replace text directly in the content stream
-        const replaced = replaceTextInStream(streamText, op, change.newText, fme);
+        const replaced = replaceTextInStream(streamText, effectiveOp, change.newText, fme);
         if (replaced === null) {
           // Encoding failed (e.g., new chars not in CID subset) — fall back
           console.log('[commitTextEdits] Strategy A encode failed, falling back');
@@ -2695,8 +2744,8 @@ export async function commitTextEdits(pdfBytes, pageNum) {
         newBytes[j] = streamText.charCodeAt(j) & 0xFF;
       }
 
+      // Write modified content into the first stream object
       const firstStream = streamData.streams[0];
-      // Overwrite the stream contents — remove compression since we have plain text
       const target = firstStream.obj;
       if (target) {
         target.contents = newBytes;
@@ -2705,6 +2754,13 @@ export async function commitTextEdits(pdfBytes, pageNum) {
           target.dict.delete(PDFLib.PDFName.of('DecodeParms'));
           target.dict.set(PDFLib.PDFName.of('Length'), PDFLib.PDFNumber.of(newBytes.length));
         }
+      }
+
+      // When Contents was an array of streams, collapse to just the first stream
+      // reference.  All content is now in stream 0; the other streams would cause
+      // duplication if they remained in the array.
+      if (streamData.streams.length > 1 && firstStream.ref && isPDFRef(firstStream.ref)) {
+        page.node.set(PDFLib.PDFName.of('Contents'), firstStream.ref);
       }
     } catch (err) {
       // Stream write failed — the changes that used content stream replacement
