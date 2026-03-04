@@ -12,6 +12,9 @@ node_modules/
 # Reference screenshots (not source code)
 Screenshots/
 
+# Test fixtures
+*.pdf
+
 # Planning docs
 Mudbrick-Product-Roadmap.docx
 Mudbrick-UI-Mockup.html
