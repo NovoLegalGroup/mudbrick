@@ -3056,19 +3056,17 @@ function updateUnsavedIndicator() {
 
 function initModalFocusTrapping() {
   // Observe all modal backdrops for visibility changes.
-  // When a modal opens, trap Tab focus inside it; when it closes, restore focus.
+  // When a modal becomes visible, trap Tab focus inside it.
+  // When it closes, the local releaseFocus() restores focus to the previously
+  // focused element that trapFocus() saved in _previousFocus.
   document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
-    let _prevFocus = null;
-
     const observer = new MutationObserver(() => {
       if (!backdrop.classList.contains('hidden')) {
-        // Modal just became visible — record current focus and trap
-        _prevFocus = document.activeElement;
+        // Modal just became visible — trap focus (saves current focus internally)
         trapFocus(backdrop);
       } else {
-        // Modal just closed — release trap and restore focus
-        releaseFocus(backdrop, _prevFocus);
-        _prevFocus = null;
+        // Modal just closed — restore focus to the pre-modal element
+        releaseFocus();
       }
     });
     observer.observe(backdrop, { attributes: true, attributeFilter: ['class'] });
@@ -3446,8 +3444,7 @@ function initDropdownMenus() {
 function openModal(backdropId) {
   const backdrop = $(backdropId);
   if (!backdrop) return;
-  // Remember which element had focus before the modal opened
-  backdrop._previousFocus = document.activeElement;
+  // trapFocus() saves current focus in the module-level _previousFocus before trapping.
   backdrop.classList.remove('hidden');
   trapFocus(backdrop);
 }
@@ -3461,8 +3458,9 @@ function closeModal(backdropId) {
   const backdrop = $(backdropId);
   if (!backdrop) return;
   backdrop.classList.add('hidden');
-  releaseFocus(backdrop, backdrop._previousFocus || null);
-  backdrop._previousFocus = null;
+  // releaseFocus() with no args restores focus using the module-level _previousFocus
+  // that was set when trapFocus() was called on modal open.
+  releaseFocus();
 }
 
 /* ═══════════════════ Event Wiring ═══════════════════ */
