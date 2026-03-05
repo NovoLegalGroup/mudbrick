@@ -64,13 +64,158 @@ export function initAnnotations(canvasId = 'fabric-canvas') {
   fabricCanvas.on('object:modified', () => autoSave());
   fabricCanvas.on('object:removed', () => autoSave());
 
+  // Sync font property inputs when a text annotation is selected
+  function syncFontControls(obj) {
+    if (!obj || obj.mudbrickType !== 'text') return;
+    const sizeInput = document.getElementById('prop-font-size');
+    const familySelect = document.getElementById('prop-font-family');
+    if (sizeInput) sizeInput.value = Math.round(obj.fontSize / currentZoom);
+    if (familySelect) {
+      // Try to match one of the dropdown options
+      const family = obj.fontFamily || '';
+      const match = [...familySelect.options].find(o => family.includes(o.value.split(',')[0].trim()));
+      if (match) familySelect.value = match.value;
+    }
+  }
+  function onTextSelected(e) {
+    const obj = e.selected?.[0];
+    syncFontControls(obj);
+    // Show font property rows when a text annotation is selected
+    if (obj && obj.mudbrickType === 'text') {
+      const propsSection = document.getElementById('panel-tool-props');
+      const fontSizeRow = document.getElementById('prop-font-size-row');
+      const fontFamilyRow = document.getElementById('prop-font-family-row');
+      if (propsSection) propsSection.style.display = '';
+      if (fontSizeRow) fontSizeRow.style.display = '';
+      if (fontFamilyRow) fontFamilyRow.style.display = '';
+    }
+  }
+  fabricCanvas.on('selection:created', onTextSelected);
+  fabricCanvas.on('selection:updated', onTextSelected);
+  fabricCanvas.on('selection:cleared', function () {
+    // Hide font rows if not in text tool
+    if (currentTool !== 'text') {
+      const fontSizeRow = document.getElementById('prop-font-size-row');
+      const fontFamilyRow = document.getElementById('prop-font-family-row');
+      if (fontSizeRow) fontSizeRow.style.display = 'none';
+      if (fontFamilyRow) fontFamilyRow.style.display = 'none';
+      // Re-hide the props section if in select mode
+      if (currentTool === 'select') {
+        const propsSection = document.getElementById('panel-tool-props');
+        if (propsSection) propsSection.style.display = 'none';
+      }
+    }
+  });
+
   // Text creation: click to place IText
   fabricCanvas.on('mouse:down', handleCanvasClick);
+
+  // Double-click on text annotations to re-enter edit mode (works from any tool).
+  // Note: dblclick on empty space in select mode naturally reaches the text layer
+  // because the wrapper defaults to pointer-events:none in select mode.
+  fabricCanvas.on('mouse:dblclick', function (opt) {
+    if (opt.target && opt.target.mudbrickType === 'text' && opt.target.type === 'i-text') {
+      opt.target.set({ selectable: true, evented: true });
+      fabricCanvas.setActiveObject(opt.target);
+      opt.target.enterEditing();
+      opt.target.setCursorByClick(opt.e);
+    }
+  });
+
+  // When user finishes editing text (clicks away), auto-switch to select mode
+  // so they can immediately reposition. Also clean up empty/placeholder text.
+  fabricCanvas.on('text:editing:exited', function (opt) {
+    const text = opt.target;
+    if (!text) return;
+    // Remove empty or placeholder text
+    if (text.text.trim() === '' || text.text === 'Type here') {
+      fabricCanvas.remove(text);
+      return;
+    }
+    // Ensure the finished text is fully interactive
+    text.set({ selectable: true, evented: true });
+    // Auto-switch to select tool for immediate repositioning
+    if (currentTool === 'text' && typeof onRequestToolSwitch === 'function') {
+      onRequestToolSwitch('select');
+    }
+  });
+
+  // In select mode, pointer-events default to 'none' so clicks pass through
+  // to the text layer / PDF canvas. We dynamically enable pointer-events on
+  // the wrapper ONLY when the cursor hovers over a Fabric annotation object,
+  // and keep it enabled during drag interactions.
+  _setupSelectHover();
 
   return fabricCanvas;
 }
 
 export function getCanvas() { return fabricCanvas; }
+
+/* ═══════════════════ Select-mode hover detection ═══════════════════ */
+
+/**
+ * In select mode the fabric wrapper defaults to pointer-events:none so clicks
+ * pass through to the text layer / PDF canvas.  We listen on `document` for
+ * mousemove and check whether the cursor is over any Fabric annotation object.
+ * If so, we enable pointer-events on the wrapper so Fabric can handle
+ * hover/click/drag.  When the cursor leaves all annotations, we disable again.
+ */
+let _selectInteracting = false;
+
+function _setupSelectHover() {
+  const wrapperEl = document.getElementById('fabric-canvas-wrapper');
+  if (!wrapperEl) return;
+
+  // Toggle pointer-events based on whether cursor is over an annotation
+  document.addEventListener('mousemove', function (e) {
+    if (currentTool !== 'select') return;
+    if (_selectInteracting) return;            // mid-drag, keep enabled
+    if (document.querySelector('.text-edit-active')) return;
+
+    const over = _isOverFabricObject(e.clientX, e.clientY);
+    wrapperEl.style.pointerEvents = over ? 'auto' : 'none';
+  });
+
+  // While mouse is held down on an annotation, keep wrapper interactive
+  // (so dragging / resizing works even if cursor leaves object bounds)
+  fabricCanvas.on('mouse:down', function () {
+    if (currentTool === 'select') _selectInteracting = true;
+  });
+  document.addEventListener('mouseup', function () {
+    if (!_selectInteracting) return;
+    _selectInteracting = false;
+    // Next mousemove will re-evaluate
+  });
+}
+
+/**
+ * Check whether (clientX, clientY) is within any Fabric object's bounding box.
+ */
+function _isOverFabricObject(clientX, clientY) {
+  if (!fabricCanvas) return false;
+  const objects = fabricCanvas.getObjects();
+  if (objects.length === 0) return false;
+
+  const canvasEl = fabricCanvas.upperCanvasEl || fabricCanvas.getElement();
+  const rect = canvasEl.getBoundingClientRect();
+
+  // Quick bounds check
+  if (clientX < rect.left || clientX > rect.right ||
+      clientY < rect.top  || clientY > rect.bottom) return false;
+
+  const pad = 6; // small padding for easier targeting
+  for (const obj of objects) {
+    if (!obj.visible) continue;
+    const b = obj.getBoundingRect();
+    const l = rect.left + b.left - pad;
+    const t = rect.top  + b.top  - pad;
+    if (clientX >= l && clientX <= l + b.width + pad * 2 &&
+        clientY >= t && clientY <= t + b.height + pad * 2) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /* ═══════════════════ Tool Switching ═══════════════════ */
 
@@ -115,8 +260,8 @@ export function setTool(toolName, options = {}) {
 
   switch (toolName) {
     case 'select':
-      // Let clicks pass through to text-layer for text selection;
-      // fabric canvas stays visible for annotation display.
+      // Default: pass-through so clicks reach text layer / PDF canvas.
+      // Dynamically enabled when cursor hovers over an annotation (see _setupSelectHover).
       wrapper.style.pointerEvents = 'none';
       fabricCanvas.hoverCursor = 'move';
       break;
@@ -150,7 +295,17 @@ export function setTool(toolName, options = {}) {
       wrapper.style.pointerEvents = 'auto';
       fabricCanvas.selection = false;
       fabricCanvas.defaultCursor = 'text';
-      fabricCanvas.forEachObject(o => { o.selectable = false; o.evented = false; });
+      // Keep text annotations interactive (for re-editing/moving) while
+      // disabling other objects so they don't interfere with text placement
+      fabricCanvas.forEachObject(o => {
+        if (o.mudbrickType === 'text') {
+          o.selectable = true;
+          o.evented = true;
+        } else {
+          o.selectable = false;
+          o.evented = false;
+        }
+      });
       break;
 
     case 'shape':
@@ -298,6 +453,8 @@ function addText(x, y) {
     fontSize: toolOptions.fontSize * currentZoom,
     fill: toolOptions.color,
     mudbrickType: 'text',
+    selectable: true,
+    evented: true,
   });
   fabricCanvas.add(text);
   fabricCanvas.setActiveObject(text);
@@ -615,6 +772,12 @@ export function setOnStickyNoteSelected(fn) {
   onStickyNoteSelected = fn;
 }
 
+// Callback for tool switch requests (e.g., auto-switch to select after text editing)
+let onRequestToolSwitch = null;
+export function setOnRequestToolSwitch(fn) {
+  onRequestToolSwitch = fn;
+}
+
 /* ═══════════════════ Stamps ═══════════════════ */
 
 const STAMPS = {
@@ -824,6 +987,18 @@ export function updateToolOptions(opts) {
       if (opts.color) {
         fabricCanvas.freeDrawingBrush.color = opts.color;
       }
+    }
+  }
+
+  // Apply font property changes to the active text annotation (if any)
+  if (fabricCanvas && (opts.fontSize || opts.fontFamily || opts.color)) {
+    const active = fabricCanvas.getActiveObject();
+    if (active && active.mudbrickType === 'text' && active.type === 'i-text') {
+      if (opts.fontSize) active.set('fontSize', opts.fontSize * currentZoom);
+      if (opts.fontFamily) active.set('fontFamily', opts.fontFamily);
+      if (opts.color) active.set('fill', opts.color);
+      fabricCanvas.renderAll();
+      autoSave();
     }
   }
 }

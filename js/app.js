@@ -33,7 +33,7 @@ import {
   duplicateSelected, copySelected, pasteClipboard,
   lockSelected, unlockSelected, isSelectionLocked,
   getAllStickyNotes, updateSelectedNoteText, setOnStickyNoteSelected,
-  addAnnotationToPage,
+  addAnnotationToPage, setOnRequestToolSwitch,
 } from './annotations.js';
 
 import { exportAnnotatedPDF } from './export.js';
@@ -179,6 +179,11 @@ async function boot() {
     setOnStickyNoteSelected((noteObj) => {
       showNotePropsPanel(noteObj);
       refreshNotesSidebar();
+    });
+
+    // Auto-switch tool when annotations request it (e.g., text → select after editing)
+    setOnRequestToolSwitch((toolName) => {
+      selectTool(toolName);
     });
 
     // Wire up all UI events
@@ -3734,6 +3739,23 @@ function wireEvents() {
     });
   }
 
+  // Properties panel — font size input
+  const fontSizeInput = $('prop-font-size');
+  if (fontSizeInput) {
+    fontSizeInput.addEventListener('change', () => {
+      const size = parseInt(fontSizeInput.value) || 16;
+      updateToolOptions({ fontSize: size });
+    });
+  }
+
+  // Properties panel — font family dropdown
+  const fontFamilySelect = $('prop-font-family');
+  if (fontFamilySelect) {
+    fontFamilySelect.addEventListener('change', () => {
+      updateToolOptions({ fontFamily: fontFamilySelect.value });
+    });
+  }
+
   // Dark mode
   $('btn-dark-mode').addEventListener('click', toggleDarkMode);
 
@@ -5501,6 +5523,12 @@ function selectTool(toolName) {
     const noPropsTools = ['select', 'hand'];
     toolPropsEl.style.display = noPropsTools.includes(toolName) ? 'none' : '';
   }
+  // Show font controls only for text tool
+  const fontSizeRow = $('prop-font-size-row');
+  const fontFamilyRow = $('prop-font-family-row');
+  const isTextTool = toolName === 'text' || toolName === 'select';
+  if (fontSizeRow) fontSizeRow.style.display = isTextTool ? '' : 'none';
+  if (fontFamilyRow) fontFamilyRow.style.display = isTextTool ? '' : 'none';
   // Update canvas cursor
   DOM.canvasArea.setAttribute('data-cursor', toolName);
 
