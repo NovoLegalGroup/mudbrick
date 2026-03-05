@@ -689,6 +689,24 @@ async function renderCurrentPage() {
   DOM.pageContainer.style.width = Math.floor(viewport.width) + 'px';
   DOM.pageContainer.style.height = Math.floor(viewport.height) + 'px';
 
+  // Restore scroll position after zoom-triggered resize
+  if (_pendingScrollRestore) {
+    const sr = _pendingScrollRestore;
+    _pendingScrollRestore = null;
+    const el = DOM.canvasArea;
+    if (sr.type === 'point') {
+      // Cursor-anchored: keep the same page point under the cursor
+      el.scrollLeft = sr.pageX * State.zoom - sr.clientX;
+      el.scrollTop = sr.pageY * State.zoom - sr.clientY;
+    } else {
+      // Ratio-based: preserve relative scroll position
+      const maxX = el.scrollWidth - el.clientWidth;
+      const maxY = el.scrollHeight - el.clientHeight;
+      el.scrollLeft = sr.rx * maxX;
+      el.scrollTop = sr.ry * maxY;
+    }
+  }
+
   // Refresh Notes sidebar
   refreshNotesSidebar();
 
@@ -774,7 +792,25 @@ let _zoomRafPending = false;
 let _pendingZoom = null;
 const ZOOM_THROTTLE_MS = 16; // ~60fps
 
+// Scroll restore state — preserves viewport position across zoom changes.
+// Two modes:
+//   { type: 'ratio', rx, ry }                          — ratio-based (button zoom)
+//   { type: 'point', pageX, pageY, clientX, clientY }  — cursor-anchored (Ctrl+scroll)
+let _pendingScrollRestore = null;
+
+function _captureScrollRatio() {
+  const el = DOM.canvasArea;
+  const maxX = el.scrollWidth - el.clientWidth;
+  const maxY = el.scrollHeight - el.clientHeight;
+  _pendingScrollRestore = {
+    type: 'ratio',
+    rx: maxX > 0 ? el.scrollLeft / maxX : 0.5,
+    ry: maxY > 0 ? el.scrollTop / maxY : 0.5,
+  };
+}
+
 function setZoom(newZoom) {
+  _captureScrollRatio();
   State.zoom = Math.max(0.25, Math.min(5.0, newZoom));
   updateZoomDisplay();
   renderCurrentPage();
@@ -786,6 +822,7 @@ function setZoom(newZoom) {
  * re-render only fires once per animation frame.
  */
 function setZoomThrottled(newZoom) {
+  // Scroll restore is set by the wheel handler (cursor-anchored), not here
   _pendingZoom = Math.max(0.25, Math.min(5.0, newZoom));
   State.zoom = _pendingZoom;   // update state immediately so display feels snappy
   updateZoomDisplay();
@@ -3518,12 +3555,14 @@ function wireEvents() {
     });
   }
 
-  // Hand-tool panning (click-and-drag to scroll canvas-area)
+  // Hand-tool panning + middle-click panning (click-and-drag to scroll canvas-area)
   {
     let panning = false, panStartX = 0, panStartY = 0, scrollStartX = 0, scrollStartY = 0;
 
     DOM.canvasArea.addEventListener('mousedown', e => {
-      if (State.activeTool !== 'hand') return;
+      const isHand = State.activeTool === 'hand' && e.button === 0;
+      const isMiddle = e.button === 1; // middle-click pans regardless of tool
+      if (!isHand && !isMiddle) return;
       // Don't interfere with sidebar or toolbar clicks
       if (e.target.closest('#sidebar') || e.target.closest('#floating-toolbar')) return;
       panning = true;
@@ -3609,11 +3648,24 @@ function wireEvents() {
   DOM.statusZoomOut.addEventListener('click', zoomOut);
   DOM.statusZoom.addEventListener('click', () => setZoom(1.0));
 
-  // Ctrl+scroll zoom on canvas area — throttled to 60fps via setZoomThrottled
+  // Ctrl+scroll zoom on canvas area — cursor-anchored, throttled to 60fps
   DOM.canvasArea.addEventListener('wheel', e => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
-      const next = getNextZoom(State.zoom, e.deltaY < 0 ? 1 : -1);
+      const oldZoom = State.zoom;
+      const next = getNextZoom(oldZoom, e.deltaY < 0 ? 1 : -1);
+      if (next === oldZoom) return;
+
+      // Cursor position relative to canvas-area viewport
+      const rect = DOM.canvasArea.getBoundingClientRect();
+      const clientX = e.clientX - rect.left;
+      const clientY = e.clientY - rect.top;
+
+      // Content-space point under cursor (zoom-independent)
+      const pageX = (DOM.canvasArea.scrollLeft + clientX) / oldZoom;
+      const pageY = (DOM.canvasArea.scrollTop + clientY) / oldZoom;
+
+      _pendingScrollRestore = { type: 'point', pageX, pageY, clientX, clientY };
       setZoomThrottled(next);
     }
   }, { passive: false });
