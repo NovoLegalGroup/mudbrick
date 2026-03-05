@@ -3226,6 +3226,7 @@ export async function enterImageEditMode(pageNum, pdfDoc, viewport, container) {
     // Action buttons
     div.innerHTML = `
       <div class="image-edit-actions">
+        <button class="image-edit-btn image-edit-edit" title="Edit image">Edit</button>
         <button class="image-edit-btn image-edit-replace" title="Replace image">Replace</button>
         <button class="image-edit-btn image-edit-delete" title="Delete image">Delete</button>
       </div>
@@ -3275,6 +3276,35 @@ export async function enterImageEditMode(pageNum, pdfDoc, viewport, container) {
         div.classList.add('image-edit-deleted');
         div.classList.remove('image-edit-replaced');
         div.style.backgroundImage = '';
+      }
+    });
+
+    // Edit button — open canvas-based image editor
+    div.querySelector('.image-edit-edit').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      // Extract image pixels from the rendered PDF canvas
+      const pdfCanvas = document.getElementById('pdf-canvas');
+      if (!pdfCanvas) return;
+      const ctx = pdfCanvas.getContext('2d');
+      const sx = Math.round(img.left);
+      const sy = Math.round(img.top);
+      const sw = Math.round(img.width);
+      const sh = Math.round(img.height);
+      if (sw < 1 || sh < 1) return;
+      const imageData = ctx.getImageData(sx, sy, sw, sh);
+
+      const { openImageEditor } = await import('./image-editor.js');
+      const result = await openImageEditor(imageData, sw, sh);
+      if (result) {
+        entry.action = 'replace';
+        entry.replaceSrc = { bytes: result.bytes, type: result.type };
+        div.classList.add('image-edit-replaced');
+        div.classList.remove('image-edit-deleted');
+        // Show preview
+        const blob = new Blob([result.bytes], { type: result.type });
+        const url = URL.createObjectURL(blob);
+        div.style.backgroundImage = `url(${url})`;
+        div.style.backgroundSize = 'cover';
       }
     });
 

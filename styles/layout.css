@@ -1380,6 +1380,146 @@ html[data-theme="dark"] #text-layer {
   background: #dc2626;
 }
 
+/* ── Image Editor Modal ── */
+.image-editor-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.image-editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--mb-toolbar-bg, #1e1e1e);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  align-items: center;
+}
+
+.image-editor-tools,
+.image-editor-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.image-editor-tool-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ccc;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.image-editor-tool-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+.image-editor-tool-btn.active {
+  background: var(--mb-accent, #2980b9);
+  color: #fff;
+  border-color: var(--mb-accent, #2980b9);
+}
+
+.image-editor-sep {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 0 4px;
+}
+
+.image-editor-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #aaa;
+  white-space: nowrap;
+}
+
+.image-editor-range {
+  width: 80px;
+  accent-color: var(--mb-accent, #2980b9);
+}
+
+.image-editor-range-val {
+  font-size: 11px;
+  color: #ccc;
+  min-width: 28px;
+  text-align: right;
+}
+
+.image-editor-canvas-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+.image-editor-canvas {
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+  image-rendering: auto;
+}
+
+.image-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--mb-toolbar-bg, #1e1e1e);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.image-editor-action-btn {
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ccc;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.image-editor-action-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.image-editor-done {
+  background: var(--mb-accent, #2980b9) !important;
+  color: #fff !important;
+  border-color: var(--mb-accent, #2980b9) !important;
+}
+.image-editor-done:hover {
+  filter: brightness(1.1);
+}
+
+.image-editor-cancel:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+/* Edit button in image overlay */
+.image-edit-edit {
+  background: rgba(34, 197, 94, 0.9);
+  color: #fff;
+}
+.image-edit-edit:hover {
+  background: #16a34a;
+}
+
 #fabric-canvas-wrapper {
   position: absolute;
   top: 0;
