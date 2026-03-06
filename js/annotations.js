@@ -10,7 +10,7 @@
  */
 
 import { pushState, undo as historyUndo, redo as historyRedo, canUndo, canRedo, clearHistory } from './history.js';
-import { createThread, getAuthorName } from './comments.js';
+import { createThread } from './comments.js';
 
 const getFabric = () => window.fabric;
 

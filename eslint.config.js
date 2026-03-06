@@ -63,6 +63,7 @@ export default [
         FontFace: 'readonly',
         CanvasRenderingContext2D: 'readonly',
         XMLSerializer: 'readonly',
+        TextEncoder: 'readonly',
       },
     },
     rules: {

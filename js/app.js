@@ -31,7 +31,7 @@ import {
   undoAnnotation, redoAnnotation,
   bringToFront, sendToBack, bringForward, sendBackward,
   duplicateSelected, copySelected, pasteClipboard,
-  lockSelected, unlockSelected, isSelectionLocked,
+  lockSelected, unlockSelected,
   getAllStickyNotes, updateSelectedNoteText, setOnStickyNoteSelected,
   addAnnotationToPage, setOnRequestToolSwitch, clearAllAnnotations,
 } from './annotations.js';
