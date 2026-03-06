@@ -294,6 +294,9 @@ export function getOCRTextEntries() {
  * Enter OCR correction mode — make OCR text spans editable.
  */
 export function enableCorrectionMode(pageNum, container) {
+  // Don't enable correction mode if page has native text — OCR overlay not needed
+  if (container.querySelectorAll('span[role="presentation"]').length > 0) return;
+
   const spans = container.querySelectorAll('.ocr-text-span');
   spans.forEach(span => {
     span.style.color = 'rgba(0,0,0,0.7)';
