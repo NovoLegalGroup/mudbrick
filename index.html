@@ -577,6 +577,10 @@
             <span data-icon="message-square" data-icon-size="14"></span>
             <span class="sidebar-tab-label">Notes</span>
           </button>
+          <button class="sidebar-tab" data-sidebar="comments" title="Comments" aria-label="Comments">
+            <span data-icon="message-square" data-icon-size="14"></span>
+            <span class="sidebar-tab-label">Comments</span>
+          </button>
           <button id="btn-toggle-sidebar" class="sidebar-collapse" title="Toggle Sidebar" aria-label="Toggle Sidebar" data-icon="panel-left-close"></button>
         </div>
         <div class="sidebar-panel active" id="sidebar-pages">
@@ -595,6 +599,20 @@
             <p>No notes yet</p>
             <p class="sidebar-empty-hint">Add annotations to pages to see notes here.</p>
           </div>
+        </div>
+        <div id="sidebar-comments" class="sidebar-panel hidden">
+          <div id="author-name-setting" style="padding:4px 8px;border-bottom:1px solid var(--border);font-size:11px;">
+            <label>Your name: <input id="author-name-input" type="text" style="width:100px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:3px;" placeholder="Anonymous"></label>
+          </div>
+          <div style="padding:8px;display:flex;gap:6px;">
+            <select id="comment-filter-status" class="modal-form-input" style="flex:1;font-size:12px;">
+              <option value="all">All</option>
+              <option value="open">Open</option>
+              <option value="resolved">Resolved</option>
+            </select>
+            <button id="btn-export-comments-xfdf" class="btn-secondary" style="font-size:11px;">Export</button>
+          </div>
+          <div id="comments-list" style="overflow-y:auto;flex:1;"></div>
         </div>
       </aside>
 
@@ -771,6 +789,24 @@
               <button class="btn-primary" id="btn-link-save" style="font-size:11px;padding:4px 10px;">Save Link</button>
               <button class="btn-secondary" id="btn-link-follow" style="font-size:11px;padding:4px 10px;">Follow</button>
               <button class="btn-secondary" id="btn-link-remove" style="font-size:11px;padding:4px 10px;color:#dc2626;">Remove</button>
+            </div>
+          </div>
+
+          <!-- Comment Thread (shown when any annotation with a thread is selected) -->
+          <div id="comment-thread-panel" class="panel-section hidden">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span class="panel-section-title" style="margin:0;">Comments</span>
+              <select id="comment-status" style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:3px;">
+                <option value="open">Open</option>
+                <option value="resolved">Resolved</option>
+                <option value="accepted">Accepted</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+            <div id="comment-replies" style="max-height:200px;overflow-y:auto;margin-bottom:6px;font-size:12px;"></div>
+            <div style="display:flex;gap:4px;">
+              <input id="comment-reply-input" type="text" placeholder="Add reply..." style="flex:1;font-size:12px;padding:4px;border:1px solid var(--border);border-radius:3px;">
+              <button id="btn-comment-reply" class="btn-primary" style="font-size:11px;padding:4px 8px;">Reply</button>
             </div>
           </div>
 

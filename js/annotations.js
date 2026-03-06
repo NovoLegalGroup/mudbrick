@@ -10,6 +10,7 @@
  */
 
 import { pushState, undo as historyUndo, redo as historyRedo, canUndo, canRedo, clearHistory } from './history.js';
+import { createThread, getAuthorName } from './comments.js';
 
 const getFabric = () => window.fabric;
 
@@ -475,6 +476,7 @@ function addText(x, y) {
     fontSize: toolOptions.fontSize * currentZoom,
     fill: toolOptions.color,
     mudbrickType: 'text',
+    commentThread: createThread(),
     selectable: true,
     evented: true,
   });
@@ -793,6 +795,7 @@ function addStickyNote(x, y) {
     mudbrickType: 'sticky-note',
     noteText: '',
     noteColor: color,
+    commentThread: createThread(),
   });
 
   fabricCanvas.add(group);
@@ -912,6 +915,7 @@ function addStamp(x, y) {
     originX: 'center',
     originY: 'center',
     mudbrickType: 'stamp',
+    commentThread: createThread(),
   });
 
   fabricCanvas.add(group);

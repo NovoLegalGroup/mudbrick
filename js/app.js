@@ -83,6 +83,7 @@ import {
 import { compareDocuments, generateCompareReport, renderComparisonView } from './doc-compare.js';
 import { pushDocState, undoDoc, redoDoc, canUndoDoc, canRedoDoc, clearDocHistory } from './doc-history.js';
 import { followLink } from './links.js';
+import { getAuthorName, setAuthorName, addReply, setThreadStatus, getAllThreads, exportThreadsXFDF } from './comments.js';
 import { canUndo, canRedo, initPageState } from './history.js';
 import { enterTextEditMode, exitTextEditMode, commitTextEdits, isTextEditActive, hasTextEditChanges, enterImageEditMode, exitImageEditMode, commitImageEdits, isImageEditActive, hasImageEditChanges, canUndoImage, undoImageAction, extractImagePositions } from './text-edit.js';
 import { addExhibitStamp, setExhibitOptions, resetExhibitCount, countExistingExhibits, EXHIBIT_FORMATS } from './exhibit-stamps.js';
@@ -3176,6 +3177,91 @@ function toggleLinkTypeFields(type) {
   }
 }
 
+/* ═══════════════════ Comment Thread Panel ═══════════════════ */
+
+let _selectedCommentObj = null;
+
+function showCommentThreadPanel(obj) {
+  _selectedCommentObj = obj;
+  const panel = $('comment-thread-panel');
+  if (!panel || !obj.commentThread) return;
+  panel.classList.remove('hidden');
+
+  $('comment-status').value = obj.commentThread.status || 'open';
+  renderCommentReplies(obj.commentThread);
+}
+
+function hideCommentThreadPanel() {
+  _selectedCommentObj = null;
+  const panel = $('comment-thread-panel');
+  if (panel) panel.classList.add('hidden');
+}
+
+function renderCommentReplies(thread) {
+  const container = $('comment-replies');
+  if (!container || !thread) return;
+
+  if (!thread.replies || thread.replies.length === 0) {
+    container.innerHTML = '<div style="color:var(--text-secondary);font-size:11px;padding:4px;">No replies yet.</div>';
+    return;
+  }
+
+  container.innerHTML = thread.replies.map(r => `
+    <div style="padding:4px 0;border-bottom:1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-secondary);">
+        <strong>${escapeHtml(r.author)}</strong>
+        <span>${new Date(r.date).toLocaleDateString()}</span>
+      </div>
+      <div style="margin-top:2px;">${escapeHtml(r.text)}</div>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s || '';
+  return div.innerHTML;
+}
+
+function refreshCommentsSidebar() {
+  const container = $('comments-list');
+  if (!container) return;
+
+  const pageAnnotations = getAnnotations();
+  const threads = getAllThreads(pageAnnotations);
+  const filter = $('comment-filter-status')?.value || 'all';
+
+  const filtered = filter === 'all' ? threads : threads.filter(t => t.thread.status === filter);
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:12px;">No comments found.</div>';
+    return;
+  }
+
+  container.innerHTML = filtered.map(t => {
+    const statusBadge = t.thread.status === 'open' ? '🔵' : t.thread.status === 'resolved' ? '✅' : t.thread.status === 'accepted' ? '👍' : '❌';
+    const replyCount = t.thread.replies?.length || 0;
+    return `
+      <div class="comment-sidebar-item" data-page="${t.pageNum}" style="padding:8px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px;">
+        <div style="display:flex;justify-content:space-between;">
+          <strong>${statusBadge} ${escapeHtml(t.thread.author)}</strong>
+          <span style="color:var(--text-secondary);font-size:10px;">p.${t.pageNum}</span>
+        </div>
+        <div style="margin-top:2px;color:var(--text-secondary);">${escapeHtml(t.text || t.type)}</div>
+        ${replyCount > 0 ? `<div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">${replyCount} repl${replyCount === 1 ? 'y' : 'ies'}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  // Click to navigate to page
+  container.querySelectorAll('.comment-sidebar-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const pageNum = parseInt(item.dataset.page);
+      if (pageNum) goToPage(pageNum);
+    });
+  });
+}
+
 function refreshNotesSidebar() {
   const panel = $('sidebar-notes');
   if (!panel) return;
@@ -4039,6 +4125,8 @@ function wireEvents() {
       tab.classList.add('active');
       const panel = $('sidebar-' + tab.dataset.sidebar);
       if (panel) panel.classList.add('active');
+      // Refresh comments list when switching to comments tab
+      if (tab.dataset.sidebar === 'comments') refreshCommentsSidebar();
     });
   });
 
@@ -4180,6 +4268,41 @@ function wireEvents() {
     hideLinkPropsPanel();
     toast('Link removed', 'info');
   });
+
+  // Comment thread events
+  $('btn-comment-reply')?.addEventListener('click', () => {
+    if (!_selectedCommentObj?.commentThread) return;
+    const input = $('comment-reply-input');
+    const text = input.value.trim();
+    if (!text) return;
+    addReply(_selectedCommentObj.commentThread, text);
+    input.value = '';
+    renderCommentReplies(_selectedCommentObj.commentThread);
+    savePageAnnotations(State.currentPage);
+    refreshCommentsSidebar();
+  });
+  $('comment-reply-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $('btn-comment-reply')?.click();
+  });
+  $('comment-status')?.addEventListener('change', (e) => {
+    if (!_selectedCommentObj?.commentThread) return;
+    setThreadStatus(_selectedCommentObj.commentThread, e.target.value);
+    savePageAnnotations(State.currentPage);
+    refreshCommentsSidebar();
+  });
+  $('comment-filter-status')?.addEventListener('change', () => refreshCommentsSidebar());
+  $('btn-export-comments-xfdf')?.addEventListener('click', () => {
+    const xml = exportThreadsXFDF(getAnnotations());
+    const blob = new Blob([xml], { type: 'application/xml' });
+    downloadBlob(blob, (State.fileName || 'document').replace(/\.pdf$/i, '') + '-comments.xfdf');
+    toast('Comments exported as XFDF', 'success');
+  });
+  // Author name
+  const authorInput = $('author-name-input');
+  if (authorInput) {
+    authorInput.value = getAuthorName();
+    authorInput.addEventListener('change', () => setAuthorName(authorInput.value));
+  }
 
   // Normalize Page Sizes modal
   $('btn-normalize-execute').addEventListener('click', executeNormalize);
@@ -4395,6 +4518,11 @@ function wireEvents() {
       } else {
         hideLinkPropsPanel();
       }
+      if (obj && obj.commentThread) {
+        showCommentThreadPanel(obj);
+      } else {
+        hideCommentThreadPanel();
+      }
     });
 
     canvas.on('selection:updated', (e) => {
@@ -4409,11 +4537,17 @@ function wireEvents() {
       } else {
         hideLinkPropsPanel();
       }
+      if (obj && obj.commentThread) {
+        showCommentThreadPanel(obj);
+      } else {
+        hideCommentThreadPanel();
+      }
     });
 
     canvas.on('selection:cleared', () => {
       hideNotePropsPanel();
       hideLinkPropsPanel();
+      hideCommentThreadPanel();
     });
 
     // Also refresh notes sidebar after any annotation modification
