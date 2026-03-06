@@ -1057,11 +1057,6 @@ html, body {
   opacity: 0.25;
   line-height: 1.0;
 }
-/* When text edit mode is active, remove the opacity so editable text is fully visible */
-#text-layer.text-edit-active {
-  opacity: 1;
-}
-
 #text-layer span,
 #text-layer br {
   color: transparent;
@@ -1098,8 +1093,9 @@ html[data-theme="dark"] #text-layer {
 
 /* ── Text Edit Mode ── */
 
-/* Override text-layer opacity so edit overlays are fully opaque */
-#text-layer.text-edit-active {
+/* Override text-layer opacity so edit overlays are fully opaque (must beat dark-mode specificity) */
+#text-layer.text-edit-active,
+html[data-theme="dark"] #text-layer.text-edit-active {
   opacity: 1;
 }
 
@@ -2627,10 +2623,9 @@ html[data-theme="dark"] #text-layer {
 
 /* ── Dark Mode Overrides ── */
 
-/* PDF pages are always white — edit overlays must be opaque regardless of theme */
+/* PDF pages are always white — edit overlays need white bg so text colors remain readable in dark mode */
 html[data-theme="dark"] .text-edit-line {
-  /* background stays transparent — canvas shows through */
-  color: #000;
+  background: rgba(255, 255, 255, 0.95) !important;
 }
 html[data-theme="dark"] .text-edit-paragraph {
   background: var(--mb-accent);
