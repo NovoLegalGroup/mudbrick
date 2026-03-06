@@ -247,6 +247,10 @@
               <span class="ribbon-icon" data-icon="sticky-note"></span>
               <span>Note</span>
             </button>
+            <button id="btn-link" class="ribbon-btn tool-btn" data-tool="link" title="Add Link" disabled aria-label="Add Link">
+              <span class="ribbon-icon" data-icon="link"></span>
+              <span>Link</span>
+            </button>
             <button id="btn-watermark" class="ribbon-btn" title="Watermark" disabled aria-label="Watermark">
               <span class="ribbon-icon" data-icon="droplet"></span>
               <span>Watermark</span>
@@ -742,6 +746,31 @@
                 <option value="Georgia, serif">Georgia</option>
                 <option value="Verdana, sans-serif">Verdana</option>
               </select>
+            </div>
+          </div>
+
+          <!-- Link Properties (shown when a link annotation is selected) -->
+          <div class="panel-section hidden" id="panel-link-props">
+            <div class="panel-section-title">Link Properties</div>
+            <div class="prop-row">
+              <span class="prop-label">Type</span>
+              <select class="prop-input" id="link-type-select" style="width:140px;">
+                <option value="url">Web URL</option>
+                <option value="page">Go to Page</option>
+              </select>
+            </div>
+            <div class="prop-row" id="link-url-row">
+              <span class="prop-label">URL</span>
+              <input type="url" class="prop-input" id="link-url-input" placeholder="https://example.com" style="width:200px;">
+            </div>
+            <div class="prop-row hidden" id="link-page-row">
+              <span class="prop-label">Page</span>
+              <input type="number" class="prop-input" id="link-page-input" min="1" value="1" style="width:80px;">
+            </div>
+            <div class="prop-row" style="gap:6px;">
+              <button class="btn-primary" id="btn-link-save" style="font-size:11px;padding:4px 10px;">Save Link</button>
+              <button class="btn-secondary" id="btn-link-follow" style="font-size:11px;padding:4px 10px;">Follow</button>
+              <button class="btn-secondary" id="btn-link-remove" style="font-size:11px;padding:4px 10px;color:#dc2626;">Remove</button>
             </div>
           </div>
 

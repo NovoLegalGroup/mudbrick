@@ -82,6 +82,7 @@ import {
 } from './comment-summary.js';
 import { compareDocuments, generateCompareReport, renderComparisonView } from './doc-compare.js';
 import { pushDocState, undoDoc, redoDoc, canUndoDoc, canRedoDoc, clearDocHistory } from './doc-history.js';
+import { followLink } from './links.js';
 import { canUndo, canRedo, initPageState } from './history.js';
 import { enterTextEditMode, exitTextEditMode, commitTextEdits, isTextEditActive, hasTextEditChanges, enterImageEditMode, exitImageEditMode, commitImageEdits, isImageEditActive, hasImageEditChanges, canUndoImage, undoImageAction, extractImagePositions } from './text-edit.js';
 import { addExhibitStamp, setExhibitOptions, resetExhibitCount, countExistingExhibits, EXHIBIT_FORMATS } from './exhibit-stamps.js';
@@ -501,6 +502,7 @@ async function openPDF(bytes, fileName, fileSize) {
   $('btn-stamp').disabled = false;
   $('btn-cover').disabled = false;
   $('btn-redact').disabled = false;
+  $('btn-link').disabled = false;
   $('btn-watermark').disabled = false;
   $('btn-insert-image').disabled = false;
   $('btn-signature').disabled = false;
@@ -3140,6 +3142,40 @@ function hideNotePropsPanel() {
   if (panel) panel.classList.add('hidden');
 }
 
+/* ═══════════════════ Link Properties Panel ═══════════════════ */
+
+let _selectedLinkObj = null;
+
+function showLinkPropsPanel(obj) {
+  _selectedLinkObj = obj;
+  const panel = $('panel-link-props');
+  if (!panel) return;
+  panel.classList.remove('hidden');
+
+  $('link-type-select').value = obj.linkType || 'url';
+  $('link-url-input').value = obj.linkURL || '';
+  $('link-page-input').value = obj.linkPage || 1;
+  toggleLinkTypeFields(obj.linkType || 'url');
+}
+
+function hideLinkPropsPanel() {
+  _selectedLinkObj = null;
+  const panel = $('panel-link-props');
+  if (panel) panel.classList.add('hidden');
+}
+
+function toggleLinkTypeFields(type) {
+  const urlRow = $('link-url-row');
+  const pageRow = $('link-page-row');
+  if (type === 'url') {
+    urlRow?.classList.remove('hidden');
+    pageRow?.classList.add('hidden');
+  } else {
+    urlRow?.classList.add('hidden');
+    pageRow?.classList.remove('hidden');
+  }
+}
+
 function refreshNotesSidebar() {
   const panel = $('sidebar-notes');
   if (!panel) return;
@@ -4111,6 +4147,40 @@ function wireEvents() {
     $('watermark-image-opacity-value').textContent = Math.round(parseFloat(e.target.value) * 100) + '%';
   });
 
+  // Link tool events
+  document.addEventListener('link-created', (e) => {
+    const obj = e.detail.obj;
+    showLinkPropsPanel(obj);
+    togglePropertiesPanel(true);
+  });
+  document.addEventListener('link-follow', (e) => {
+    const obj = e.detail.obj;
+    followLink(obj, goToPage);
+  });
+  $('link-type-select')?.addEventListener('change', (e) => {
+    toggleLinkTypeFields(e.target.value);
+  });
+  $('btn-link-save')?.addEventListener('click', () => {
+    if (!_selectedLinkObj) return;
+    _selectedLinkObj.linkType = $('link-type-select').value;
+    _selectedLinkObj.linkURL = $('link-url-input').value;
+    _selectedLinkObj.linkPage = parseInt($('link-page-input').value) || 1;
+    toast('Link saved', 'success');
+  });
+  $('btn-link-follow')?.addEventListener('click', () => {
+    if (_selectedLinkObj) followLink(_selectedLinkObj, goToPage);
+  });
+  $('btn-link-remove')?.addEventListener('click', () => {
+    if (!_selectedLinkObj) return;
+    const canvas = getCanvas();
+    if (canvas) {
+      canvas.remove(_selectedLinkObj);
+      canvas.renderAll();
+    }
+    hideLinkPropsPanel();
+    toast('Link removed', 'info');
+  });
+
   // Normalize Page Sizes modal
   $('btn-normalize-execute').addEventListener('click', executeNormalize);
 
@@ -4320,6 +4390,11 @@ function wireEvents() {
       } else {
         hideNotePropsPanel();
       }
+      if (obj && obj.mudbrickType === 'link') {
+        showLinkPropsPanel(obj);
+      } else {
+        hideLinkPropsPanel();
+      }
     });
 
     canvas.on('selection:updated', (e) => {
@@ -4329,10 +4404,16 @@ function wireEvents() {
       } else {
         hideNotePropsPanel();
       }
+      if (obj && obj.mudbrickType === 'link') {
+        showLinkPropsPanel(obj);
+      } else {
+        hideLinkPropsPanel();
+      }
     });
 
     canvas.on('selection:cleared', () => {
       hideNotePropsPanel();
+      hideLinkPropsPanel();
     });
 
     // Also refresh notes sidebar after any annotation modification

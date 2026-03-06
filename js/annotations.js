@@ -31,7 +31,7 @@ let toolOptions = {
 const pageAnnotations = {};
 
 // Custom properties to persist in JSON
-const CUSTOM_PROPS = ['mudbrickType', 'noteText', 'noteColor'];
+const CUSTOM_PROPS = ['mudbrickType', 'noteText', 'noteColor', 'linkType', 'linkURL', 'linkPage', 'commentThread'];
 
 // Suppress auto-save during page transitions
 let suppressAutoSave = false;
@@ -119,6 +119,10 @@ export function initAnnotations(canvasId = 'fabric-canvas') {
       fabricCanvas.setActiveObject(opt.target);
       opt.target.enterEditing();
       opt.target.setCursorByClick(opt.e);
+    }
+    // Double-click on link → follow it
+    if (opt.target && opt.target.mudbrickType === 'link') {
+      document.dispatchEvent(new CustomEvent('link-follow', { detail: { obj: opt.target } }));
     }
   });
 
@@ -347,6 +351,13 @@ export function setTool(toolName, options = {}) {
       fabricCanvas.forEachObject(o => { o.selectable = false; o.evented = false; });
       break;
 
+    case 'link':
+      wrapper.style.pointerEvents = 'auto';
+      fabricCanvas.selection = false;
+      fabricCanvas.defaultCursor = 'crosshair';
+      fabricCanvas.forEachObject(o => { o.selectable = false; o.evented = false; });
+      break;
+
     case 'underline':
       wrapper.style.pointerEvents = 'auto';
       fabricCanvas.isDrawingMode = true;
@@ -435,6 +446,13 @@ function handleCanvasClick(opt) {
       if (!shapeStartPoint) {
         shapeStartPoint = { x: pointer.x, y: pointer.y };
         startRedactPreview(pointer);
+      }
+      break;
+
+    case 'link':
+      if (!shapeStartPoint) {
+        shapeStartPoint = { x: pointer.x, y: pointer.y };
+        startLinkPreview(pointer);
       }
       break;
 
@@ -670,6 +688,60 @@ function onRedactUp() {
     shapePreview.set({ selectable: true, evented: true });
     fabricCanvas.setActiveObject(shapePreview);
     fabricCanvas.renderAll();
+  }
+
+  shapeStartPoint = null;
+  shapePreview = null;
+}
+
+/* ═══════════════════ Link Tool ═══════════════════ */
+
+function startLinkPreview(pointer) {
+  fabricCanvas.on('mouse:move', onLinkMove);
+  fabricCanvas.on('mouse:up', onLinkUp);
+}
+
+function onLinkMove(opt) {
+  const fabric = getFabric();
+  const pointer = fabricCanvas.getPointer(opt.e);
+
+  if (shapePreview) {
+    fabricCanvas.remove(shapePreview);
+  }
+
+  const left = Math.min(shapeStartPoint.x, pointer.x);
+  const top = Math.min(shapeStartPoint.y, pointer.y);
+  const width = Math.abs(pointer.x - shapeStartPoint.x);
+  const height = Math.abs(pointer.y - shapeStartPoint.y);
+
+  shapePreview = new fabric.Rect({
+    left, top, width, height,
+    fill: 'rgba(0, 100, 255, 0.08)',
+    stroke: '#0066cc',
+    strokeWidth: 1,
+    strokeDashArray: [4, 3],
+    selectable: false,
+    evented: false,
+    mudbrickType: 'link',
+    linkType: 'url',
+    linkURL: '',
+    linkPage: 1,
+  });
+
+  fabricCanvas.add(shapePreview);
+  fabricCanvas.renderAll();
+}
+
+function onLinkUp() {
+  fabricCanvas.off('mouse:move', onLinkMove);
+  fabricCanvas.off('mouse:up', onLinkUp);
+
+  if (shapePreview) {
+    shapePreview.set({ selectable: true, evented: true });
+    fabricCanvas.setActiveObject(shapePreview);
+    fabricCanvas.renderAll();
+    // Dispatch event to open link editor in app.js
+    document.dispatchEvent(new CustomEvent('link-created', { detail: { obj: shapePreview } }));
   }
 
   shapeStartPoint = null;

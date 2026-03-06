@@ -16,6 +16,7 @@ import {
 } from './annotations.js';
 
 import { showUserError, clearRecoveryData } from './error-handler.js';
+import { writeLinkToPDF } from './links.js';
 
 const getPDFLib = () => window.PDFLib;
 const getFabric = () => window.fabric;
@@ -216,8 +217,14 @@ export async function exportAnnotatedPDF(opts) {
       // Step 2b: Render remaining annotations (except covers/redacts/text) to PNG
       const nonCoverObjects = (json.objects || []).filter(
         obj => obj.mudbrickType !== 'cover' && obj.mudbrickType !== 'redact' &&
-               obj.mudbrickType !== 'text'
+               obj.mudbrickType !== 'text' && obj.mudbrickType !== 'link'
       );
+
+      // Step 2c: Convert link annotations to real PDF /Link annotations
+      const linkObjects = (json.objects || []).filter(obj => obj.mudbrickType === 'link');
+      for (const linkObj of linkObjects) {
+        writeLinkToPDF(page, linkObj, savedCanvasW, savedCanvasH, effectiveWidth, effectiveHeight);
+      }
 
       if (nonCoverObjects.length > 0) {
         // Create a temporary canvas for rendering
