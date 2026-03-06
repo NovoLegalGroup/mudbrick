@@ -287,6 +287,9 @@ export async function exportAnnotatedPDF(opts) {
       }
     }
 
+    // Step 3: Preserve existing PDF link annotations from the original document
+    await preserveLinkAnnotations(pdfBytes, pdfDoc, pageAnnotations, PDFLib);
+
     const bytes = await pdfDoc.save();
     // Clear recovery data on successful export
     clearRecoveryData().catch(() => {});
@@ -313,6 +316,137 @@ export async function exportAnnotatedPDF(opts) {
 export async function exportFlattenedPDF(opts) {
   // For now, use the same pipeline as annotated export
   return exportAnnotatedPDF(opts);
+}
+
+/* ═══════════════════ Link Preservation ═══════════════════ */
+
+/**
+ * Copy /Link annotations from the original PDF to the export document.
+ * Excludes links that overlap with cover/redact annotations (deliberately hidden).
+ */
+async function preserveLinkAnnotations(originalBytes, exportDoc, pageAnnotations, PDFLib) {
+  try {
+    const origDoc = await PDFLib.PDFDocument.load(originalBytes, { ignoreEncryption: true });
+    const pageCount = Math.min(origDoc.getPageCount(), exportDoc.getPageCount());
+
+    for (let i = 0; i < pageCount; i++) {
+      const origPage = origDoc.getPage(i);
+      const exportPage = exportDoc.getPage(i);
+      const annotsRef = origPage.node.lookup(PDFLib.PDFName.of('Annots'));
+      if (!annotsRef || !(annotsRef instanceof PDFLib.PDFArray)) continue;
+
+      const { width: pageW, height: pageH } = origPage.getSize();
+
+      // Collect cover/redact rects for this page to exclude overlapping links
+      const pageNum = i + 1;
+      const json = pageAnnotations[pageNum];
+      const coverRects = [];
+      if (json?.objects) {
+        const savedCanvasW = json._canvasWidth || pageW;
+        const savedCanvasH = json._canvasHeight || pageH;
+        const sx = pageW / savedCanvasW;
+        const sy = pageH / savedCanvasH;
+        for (const obj of json.objects) {
+          if (obj.mudbrickType !== 'cover' && obj.mudbrickType !== 'redact') continue;
+          const cx = (obj.left || 0) * sx;
+          const cy = (obj.top || 0) * sy;
+          const cw = (obj.width || 0) * (obj.scaleX || 1) * sx;
+          const ch = (obj.height || 0) * (obj.scaleY || 1) * sy;
+          // Convert to PDF coords (bottom-left origin)
+          coverRects.push({
+            x1: cx, y1: pageH - cy - ch,
+            x2: cx + cw, y2: pageH - cy,
+          });
+        }
+      }
+
+      // Collect link annotations to rebuild in the export doc
+      const linkAnnotsToAdd = [];
+      for (let j = 0; j < annotsRef.size(); j++) {
+        const annotDict = annotsRef.lookup(j);
+        if (!annotDict) continue;
+
+        const subtype = annotDict.lookup(PDFLib.PDFName.of('Subtype'));
+        if (!subtype || subtype.toString() !== '/Link') continue;
+
+        const rect = annotDict.lookup(PDFLib.PDFName.of('Rect'));
+        if (!rect) continue;
+
+        // Check if link overlaps with any cover/redact
+        const [rx1, ry1, rx2, ry2] = rect.asArray().map(n => n.asNumber());
+        const linkRect = {
+          x1: Math.min(rx1, rx2), y1: Math.min(ry1, ry2),
+          x2: Math.max(rx1, rx2), y2: Math.max(ry1, ry2),
+        };
+
+        const overlapsRedact = coverRects.some(cr =>
+          linkRect.x1 < cr.x2 && linkRect.x2 > cr.x1 &&
+          linkRect.y1 < cr.y2 && linkRect.y2 > cr.y1
+        );
+        if (overlapsRedact) continue;
+
+        // Rebuild this link annotation in the export document context
+        const newAnnotDict = {};
+        newAnnotDict.Type = 'Annot';
+        newAnnotDict.Subtype = 'Link';
+        newAnnotDict.Rect = [rx1, ry1, rx2, ry2];
+
+        // Copy Border if present
+        const border = annotDict.lookup(PDFLib.PDFName.of('Border'));
+        if (border instanceof PDFLib.PDFArray) {
+          newAnnotDict.Border = border.asArray().map(n => n.asNumber ? n.asNumber() : 0);
+        } else {
+          newAnnotDict.Border = [0, 0, 0];
+        }
+
+        // Copy the action (URI or GoTo)
+        const action = annotDict.lookup(PDFLib.PDFName.of('A'));
+        if (action) {
+          const sType = action.lookup(PDFLib.PDFName.of('S'));
+          if (sType && sType.toString() === '/URI') {
+            const uri = action.lookup(PDFLib.PDFName.of('URI'));
+            if (uri) {
+              newAnnotDict.A = {
+                S: 'URI',
+                URI: PDFLib.PDFString.of(uri.decodeText ? uri.decodeText() : uri.toString()),
+              };
+            }
+          } else if (sType && sType.toString() === '/GoTo') {
+            // Internal page links — preserve destination string
+            const dest = action.lookup(PDFLib.PDFName.of('D'));
+            if (dest) {
+              newAnnotDict.A = { S: 'GoTo', D: PDFLib.PDFString.of(dest.toString()) };
+            }
+          }
+        }
+
+        // Copy Dest (alternative to A for some links)
+        if (!newAnnotDict.A) {
+          const dest = annotDict.lookup(PDFLib.PDFName.of('Dest'));
+          if (dest) continue; // Skip complex page-ref destinations (can't easily copy cross-doc)
+        }
+
+        if (!newAnnotDict.A) continue; // No action — skip
+
+        const ref = exportDoc.context.register(exportDoc.context.obj(newAnnotDict));
+        linkAnnotsToAdd.push(ref);
+      }
+
+      if (linkAnnotsToAdd.length === 0) continue;
+
+      // Add link annotations to the export page
+      const existingAnnots = exportPage.node.lookup(PDFLib.PDFName.of('Annots'));
+      if (existingAnnots instanceof PDFLib.PDFArray) {
+        for (const ref of linkAnnotsToAdd) existingAnnots.push(ref);
+      } else {
+        const arr = exportDoc.context.obj(linkAnnotsToAdd);
+        exportPage.node.set(PDFLib.PDFName.of('Annots'), arr);
+      }
+    }
+  } catch (err) {
+    // Link preservation is best-effort — don't fail the entire export
+    console.warn('Could not preserve link annotations:', err.message);
+  }
 }
 
 /* ═══════════════════ Helpers ═══════════════════ */
