@@ -3597,8 +3597,10 @@ function wireEvents() {
   DOM.btnEditText.addEventListener('click', handleEditText);
 
   // Double-click on text layer enters edit mode
-  DOM.textLayer.addEventListener('dblclick', () => {
+  DOM.textLayer.addEventListener('dblclick', (e) => {
     if (!State.pdfDoc || isTextEditActive()) return;
+    // Don't enter text edit when image edit is active (overlays are in text layer)
+    if (isImageEditActive()) return;
     handleEditText();
   });
 
