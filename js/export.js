@@ -133,10 +133,90 @@ export async function exportAnnotatedPDF(opts) {
         });
       }
 
-      // Step 2: Render all annotations (except covers/redacts) to PNG
-      // We need to temporarily load this page's annotations, render, then restore
+      // Step 2a: Render text annotations as native PDF text (so they remain editable)
+      const textObjects = (json.objects || []).filter(
+        obj => obj.mudbrickType === 'text' && (obj.type === 'i-text' || obj.type === 'textbox')
+      );
+      const fontCache = {};
+
+      for (const textObj of textObjects) {
+        const tx = textObj.left || 0;
+        const ty = textObj.top || 0;
+        const scaleFX = textObj.scaleX || 1;
+        const scaleFY = textObj.scaleY || 1;
+        const fontSize = (textObj.fontSize || 16) * scaleFY;
+        const textContent = textObj.text || '';
+        if (!textContent.trim()) continue;
+
+        // Scale from canvas coords to PDF coords
+        const sx = effectiveWidth / savedCanvasW;
+        const sy = effectiveHeight / savedCanvasH;
+
+        // Parse fill color
+        let color = PDFLib.rgb(0, 0, 0);
+        if (textObj.fill) {
+          const hex = textObj.fill;
+          if (hex.startsWith('#') && hex.length >= 7) {
+            color = PDFLib.rgb(
+              parseInt(hex.slice(1, 3), 16) / 255,
+              parseInt(hex.slice(3, 5), 16) / 255,
+              parseInt(hex.slice(5, 7), 16) / 255,
+            );
+          } else if (hex.startsWith('rgb')) {
+            const m = hex.match(/(\d+)/g);
+            if (m && m.length >= 3) {
+              color = PDFLib.rgb(+m[0] / 255, +m[1] / 255, +m[2] / 255);
+            }
+          }
+        }
+
+        // Embed a standard font matching the annotation's font
+        const fontName = (textObj.fontFamily || 'Helvetica').split(',')[0].trim();
+        const isBold = textObj.fontWeight === 'bold' || (textObj.fontWeight >= 700);
+        const isItalic = textObj.fontStyle === 'italic';
+        let stdFont = 'Helvetica';
+        if (/times|serif/i.test(fontName) && !/sans/i.test(fontName)) {
+          stdFont = isBold && isItalic ? 'TimesRomanBoldItalic' :
+                    isBold ? 'TimesRomanBold' :
+                    isItalic ? 'TimesRomanItalic' : 'TimesRoman';
+        } else if (/courier|mono/i.test(fontName)) {
+          stdFont = isBold && isItalic ? 'CourierBoldOblique' :
+                    isBold ? 'CourierBold' :
+                    isItalic ? 'CourierOblique' : 'Courier';
+        } else {
+          stdFont = isBold && isItalic ? 'HelveticaBoldOblique' :
+                    isBold ? 'HelveticaBold' :
+                    isItalic ? 'HelveticaOblique' : 'Helvetica';
+        }
+        if (!fontCache[stdFont]) {
+          fontCache[stdFont] = await pdfDoc.embedFont(PDFLib.StandardFonts[stdFont] || PDFLib.StandardFonts.Helvetica);
+        }
+        const font = fontCache[stdFont];
+
+        // Draw each line of text
+        const pdfFontSize = fontSize * sy;
+        const lines = textContent.split('\n');
+        for (let li = 0; li < lines.length; li++) {
+          const line = lines[li];
+          if (!line) continue;
+          const lineY = ty + fontSize * (li + 1) * (textObj.lineHeight || 1.16);
+          const pdfX = tx * sx;
+          const pdfY = effectiveHeight - (lineY * sy);
+
+          page.drawText(line, {
+            x: pdfX,
+            y: pdfY,
+            size: pdfFontSize,
+            font,
+            color,
+          });
+        }
+      }
+
+      // Step 2b: Render remaining annotations (except covers/redacts/text) to PNG
       const nonCoverObjects = (json.objects || []).filter(
-        obj => obj.mudbrickType !== 'cover' && obj.mudbrickType !== 'redact'
+        obj => obj.mudbrickType !== 'cover' && obj.mudbrickType !== 'redact' &&
+               obj.mudbrickType !== 'text'
       );
 
       if (nonCoverObjects.length > 0) {

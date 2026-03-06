@@ -33,7 +33,7 @@ import {
   duplicateSelected, copySelected, pasteClipboard,
   lockSelected, unlockSelected, isSelectionLocked,
   getAllStickyNotes, updateSelectedNoteText, setOnStickyNoteSelected,
-  addAnnotationToPage, setOnRequestToolSwitch,
+  addAnnotationToPage, setOnRequestToolSwitch, clearAllAnnotations,
 } from './annotations.js';
 
 import { exportAnnotatedPDF } from './export.js';
@@ -2125,6 +2125,102 @@ async function executePrint(pageNums, printScale) {
   }
 }
 
+/* ═══════════════════ Save ═══════════════════ */
+
+/**
+ * Save in-place: bake annotations into State.pdfBytes without downloading.
+ * The document stays open with annotations cleared (since they're now baked in).
+ */
+async function handleSave() {
+  if (!State.pdfBytes) return;
+
+  // If no annotations or form changes, nothing to bake
+  if (!hasAnnotations() && !(State.pdfLibDoc && State.formFields.length > 0)) {
+    toast('Nothing to save — no changes detected', 'info');
+    return;
+  }
+
+  showLoading('Saving…');
+  try {
+    // Bake form values first
+    let exportBytes = State.pdfBytes;
+    if (State.pdfLibDoc && State.formFields.length > 0) {
+      const wrote = writeFormValues(State.pdfLibDoc);
+      if (wrote) {
+        exportBytes = await State.pdfLibDoc.save();
+      }
+    }
+
+    const result = await exportAnnotatedPDF({
+      pdfBytes: exportBytes,
+      currentPage: State.currentPage,
+      totalPages: State.totalPages,
+      fileName: State.fileName,
+      onProgress: (done, total) => {
+        updateLoadingProgress(`Baking annotations… page ${done} of ${total}`, done, total);
+      },
+    });
+
+    // Clear annotations since they're now part of the PDF
+    clearAllAnnotations();
+
+    // Reload the new bytes into the viewer
+    await reloadAfterEdit(result.bytes);
+
+    toast('Saved — annotations baked into document', 'success');
+  } catch (err) {
+    console.error('Save failed:', err);
+    toast('Save failed: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+/**
+ * Save and download: bake annotations into PDF and download with original filename.
+ */
+async function handleSaveDownload() {
+  if (!State.pdfBytes) return;
+
+  showLoading('Saving…');
+  try {
+    let exportBytes = State.pdfBytes;
+    if (State.pdfLibDoc && State.formFields.length > 0) {
+      const wrote = writeFormValues(State.pdfLibDoc);
+      if (wrote) {
+        exportBytes = await State.pdfLibDoc.save();
+      }
+    }
+
+    const result = await exportAnnotatedPDF({
+      pdfBytes: exportBytes,
+      currentPage: State.currentPage,
+      totalPages: State.totalPages,
+      fileName: State.fileName,
+      onProgress: (done, total) => {
+        updateLoadingProgress(`Baking annotations… page ${done} of ${total}`, done, total);
+      },
+    });
+
+    // Clear annotations and reload
+    clearAllAnnotations();
+    await reloadAfterEdit(result.bytes);
+
+    // Download with original filename
+    const outName = State.fileName || 'document.pdf';
+    downloadBlob(
+      new Blob([result.bytes], { type: 'application/pdf' }),
+      outName
+    );
+    toast(`Saved ${outName}`, 'success');
+  } catch (err) {
+    console.error('Save failed:', err);
+    toast('Save failed: ' + err.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
 /* ═══════════════════ Export ═══════════════════ */
 
 /**
@@ -3386,7 +3482,9 @@ function getMenuDefinitions() {
       { icon: 'folder-open', label: 'Open', shortcut: 'Ctrl+O', needsDoc: false, action: () => DOM.fileInput.click() },
       { icon: 'clock', label: 'Open Recent', needsDoc: false, submenu: () => buildRecentSubmenu() },
       '---',
-      { icon: 'save', label: 'Save / Export', shortcut: 'Ctrl+S', action: handleExport },
+      { icon: 'save', label: 'Save', shortcut: 'Ctrl+S', action: handleSave },
+      { icon: 'download', label: 'Save & Download', shortcut: 'Ctrl+Shift+S', action: handleSaveDownload },
+      { icon: 'file-output', label: 'Export…', action: handleExport },
       { icon: 'download', label: 'Export as Image', action: () => $('btn-export-image').click() },
       '---',
       { icon: 'printer', label: 'Print', shortcut: 'Ctrl+P', action: handlePrint },
@@ -3450,6 +3548,8 @@ function getMenuDefinitions() {
       { icon: 'message-square', label: 'Comment Summary', action: () => $('btn-comment-summary').click() },
       '---',
       { icon: 'maximize', label: 'Normalize Page Sizes', action: openNormalizePagesModal },
+      '---',
+      { icon: 'zap', label: 'Optimize / Compress', action: () => { $('optimize-result').textContent = ''; $('optimize-result').classList.add('hidden'); $('optimize-modal-backdrop').classList.remove('hidden'); } },
     ],
     'Help': [
       { icon: 'info', label: 'Keyboard Shortcuts', shortcut: '?', needsDoc: false, action: openShortcutsModal },
@@ -3670,6 +3770,14 @@ function wireEvents() {
   DOM.textLayer.addEventListener('dblclick', async (e) => {
     if (!State.pdfDoc || isTextEditActive()) return;
     if (isImageEditActive()) return;
+
+    // If the click landed directly on a text span, prioritize text editing
+    const clickedEl = e.target;
+    if (clickedEl && clickedEl.tagName === 'SPAN' && clickedEl.closest('#text-layer') &&
+        clickedEl.textContent.trim().length > 0) {
+      handleEditText();
+      return;
+    }
 
     // Check if the click landed on an image region
     const rect = DOM.pageContainer.getBoundingClientRect();
@@ -5663,10 +5771,14 @@ function handleKeyboard(e) {
       DOM.fileInput.click();
       break;
 
-    // Export / Save
+    // Save (Ctrl+S) / Save & Download (Ctrl+Shift+S)
     case e.key === 's' && mod:
       e.preventDefault();
-      handleExport();
+      if (e.shiftKey) {
+        handleSaveDownload();
+      } else {
+        handleSave();
+      }
       break;
   }
 }
@@ -5760,6 +5872,8 @@ window.Mudbrick = {
   setZoom,
   getCanvas,
   handleExport,
+  handleSave,
+  handleSaveDownload,
 };
 
 /* ═══════════════════ Boot ═══════════════════ */

@@ -960,6 +960,21 @@ export function hasAnnotations() {
   });
 }
 
+/**
+ * Clear all stored annotations across all pages and reset the canvas.
+ * Called after baking annotations into the PDF (save in-place).
+ */
+export function clearAllAnnotations() {
+  for (const key of Object.keys(pageAnnotations)) {
+    delete pageAnnotations[key];
+  }
+  if (fabricCanvas) {
+    fabricCanvas.clear();
+    fabricCanvas.renderAll();
+  }
+  clearHistory();
+}
+
 /* ═══════════════════ Resize & Zoom ═══════════════════ */
 
 /**
