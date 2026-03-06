@@ -367,6 +367,66 @@ export async function addWatermark(pdfBytes, opts = {}) {
   return doc.save();
 }
 
+/* ═══════════════════ Image Watermark ═══════════════════ */
+
+export async function addImageWatermark(pdfBytes, opts = {}) {
+  const PDFLib = getPDFLib();
+  const doc = await ensurePdfLib(pdfBytes);
+  const {
+    imageBytes,
+    imageType = 'png',
+    scale = 0.3,
+    opacity = 0.15,
+    rotation = 0,
+    position = 'center',
+    tileGap = 50,
+    pages = 'all',
+    currentPage = 1,
+  } = opts;
+
+  const image = imageType === 'png'
+    ? await doc.embedPng(imageBytes)
+    : await doc.embedJpg(imageBytes);
+
+  const pageCount = doc.getPageCount();
+  const startIdx = pages === 'current' ? currentPage - 1 : 0;
+  const endIdx = pages === 'current' ? currentPage : pageCount;
+
+  for (let i = startIdx; i < endIdx; i++) {
+    const page = doc.getPage(i);
+    const { width, height } = page.getSize();
+    const imgW = width * scale;
+    const imgH = imgW * (image.height / image.width);
+
+    if (position === 'tile') {
+      for (let ty = height; ty > -imgH; ty -= imgH + tileGap) {
+        for (let tx = 0; tx < width; tx += imgW + tileGap) {
+          page.drawImage(image, {
+            x: tx, y: ty - imgH, width: imgW, height: imgH,
+            opacity, rotate: PDFLib.degrees(rotation),
+          });
+        }
+      }
+    } else {
+      let x, y;
+      switch (position) {
+        case 'top-left':     x = 20; y = height - imgH - 20; break;
+        case 'top-right':    x = width - imgW - 20; y = height - imgH - 20; break;
+        case 'bottom-left':  x = 20; y = 20; break;
+        case 'bottom-right': x = width - imgW - 20; y = 20; break;
+        default:
+          x = (width - imgW) / 2;
+          y = (height - imgH) / 2;
+      }
+      page.drawImage(image, {
+        x, y, width: imgW, height: imgH,
+        opacity, rotate: PDFLib.degrees(rotation),
+      });
+    }
+  }
+  return doc.save();
+}
+
 /* ═══════════════════ Normalize Page Sizes ═══════════════════ */
 
 /**

@@ -951,32 +951,76 @@
         <button type="button" class="modal-close" aria-label="Close" data-close-modal="watermark">&times;</button>
       </div>
       <div class="modal-body">
+        <div class="watermark-type-tabs" style="display:flex;gap:0;margin-bottom:12px;">
+          <button class="btn-tab active" id="watermark-tab-text" style="flex:1;">Text</button>
+          <button class="btn-tab" id="watermark-tab-image" style="flex:1;">Image</button>
+        </div>
         <div class="modal-form-stack">
-          <div>
-            <label class="modal-form-label" for="watermark-text">Text</label>
-            <input type="text" id="watermark-text" value="CONFIDENTIAL" class="modal-form-input"
-              placeholder="Watermark text">
+          <div id="watermark-text-fields">
+            <div>
+              <label class="modal-form-label" for="watermark-text">Text</label>
+              <input type="text" id="watermark-text" value="CONFIDENTIAL" class="modal-form-input"
+                placeholder="Watermark text">
+            </div>
+            <div class="modal-form-grid">
+              <div>
+                <label class="modal-form-label" for="watermark-size">Font Size</label>
+                <input type="number" id="watermark-size" value="60" min="10" max="200" class="modal-form-input" aria-label="Watermark Size">
+              </div>
+              <div>
+                <label class="modal-form-label" for="watermark-rotation">Rotation (&deg;)</label>
+                <input type="number" id="watermark-rotation" value="-45" min="-180" max="180" class="modal-form-input" aria-label="Watermark Rotation">
+              </div>
+            </div>
+            <div class="modal-form-grid">
+              <div>
+                <label class="modal-form-label" for="watermark-opacity">Opacity</label>
+                <input type="range" id="watermark-opacity" min="0.05" max="0.5" step="0.05" value="0.15"
+                  class="w-full" aria-label="Watermark Opacity">
+                <span id="watermark-opacity-value" class="range-value-label">15%</span>
+              </div>
+              <div>
+                <label class="modal-form-label" for="watermark-color">Color</label>
+                <input type="color" id="watermark-color" value="#888888" class="modal-form-color" aria-label="Watermark Color">
+              </div>
+            </div>
           </div>
-          <div class="modal-form-grid">
+          <div id="watermark-image-fields" class="hidden">
             <div>
-              <label class="modal-form-label" for="watermark-size">Font Size</label>
-              <input type="number" id="watermark-size" value="60" min="10" max="200" class="modal-form-input" aria-label="Watermark Size">
+              <label class="modal-form-label" for="watermark-image-file">Image (PNG/JPEG)</label>
+              <input type="file" id="watermark-image-file" accept="image/png,image/jpeg" class="modal-form-input">
             </div>
-            <div>
-              <label class="modal-form-label" for="watermark-rotation">Rotation (&deg;)</label>
-              <input type="number" id="watermark-rotation" value="-45" min="-180" max="180" class="modal-form-input" aria-label="Watermark Rotation">
+            <div id="watermark-image-preview" class="hidden" style="text-align:center;margin:8px 0;">
+              <img id="watermark-image-thumb" style="max-height:100px;opacity:0.5;" alt="Preview">
             </div>
-          </div>
-          <div class="modal-form-grid">
-            <div>
-              <label class="modal-form-label" for="watermark-opacity">Opacity</label>
-              <input type="range" id="watermark-opacity" min="0.05" max="0.5" step="0.05" value="0.15"
-                class="w-full" aria-label="Watermark Opacity">
-              <span id="watermark-opacity-value" class="range-value-label">15%</span>
+            <div class="modal-form-grid">
+              <div>
+                <label class="modal-form-label" for="watermark-image-scale">Scale</label>
+                <input type="range" id="watermark-image-scale" min="0.05" max="1" step="0.05" value="0.3" class="w-full">
+                <span id="watermark-image-scale-value" class="range-value-label">30%</span>
+              </div>
+              <div>
+                <label class="modal-form-label" for="watermark-image-opacity">Opacity</label>
+                <input type="range" id="watermark-image-opacity" min="0.05" max="0.5" step="0.05" value="0.15" class="w-full">
+                <span id="watermark-image-opacity-value" class="range-value-label">15%</span>
+              </div>
             </div>
-            <div>
-              <label class="modal-form-label" for="watermark-color">Color</label>
-              <input type="color" id="watermark-color" value="#888888" class="modal-form-color" aria-label="Watermark Color">
+            <div class="modal-form-grid">
+              <div>
+                <label class="modal-form-label" for="watermark-image-position">Position</label>
+                <select id="watermark-image-position" class="modal-form-input">
+                  <option value="center">Center</option>
+                  <option value="tile">Tile (repeat)</option>
+                  <option value="top-left">Top Left</option>
+                  <option value="top-right">Top Right</option>
+                  <option value="bottom-left">Bottom Left</option>
+                  <option value="bottom-right">Bottom Right</option>
+                </select>
+              </div>
+              <div>
+                <label class="modal-form-label" for="watermark-image-rotation">Rotation (&deg;)</label>
+                <input type="number" id="watermark-image-rotation" value="0" min="-180" max="180" class="modal-form-input">
+              </div>
             </div>
           </div>
           <div>

@@ -20,7 +20,7 @@ import {
 
 import {
   resetPdfLib, ensurePdfLib, rotatePage, deletePage,
-  reorderPages, mergePDFs, splitPDF, addWatermark, appendPages,
+  reorderPages, mergePDFs, splitPDF, addWatermark, addImageWatermark, appendPages,
   insertBlankPage, cropPages, replacePages, normalizePageSizes,
 } from './pdf-edit.js';
 
@@ -2447,20 +2447,42 @@ function closeWatermarkModal() {
 async function executeWatermark() {
   if (!State.pdfBytes) return;
 
-  const text = $('watermark-text').value.trim();
-  if (!text) { toast('Enter watermark text', 'warning'); return; }
+  const isImageMode = $('watermark-tab-image')?.classList.contains('active');
 
   showLoading('Applying watermark…');
   try {
-    const newBytes = await addWatermark(State.pdfBytes, {
-      text,
-      fontSize: parseInt($('watermark-size').value) || 60,
-      rotation: parseInt($('watermark-rotation').value) || -45,
-      opacity: parseFloat($('watermark-opacity').value) || 0.15,
-      color: $('watermark-color').value || '#888888',
-      pages: $('watermark-pages').value || 'all',
-      currentPage: State.currentPage,
-    });
+    let newBytes;
+    if (isImageMode) {
+      const fileInput = $('watermark-image-file');
+      if (!fileInput?.files?.length) { hideLoading(); toast('Select an image file', 'warning'); return; }
+      const file = fileInput.files[0];
+      const imageBytes = new Uint8Array(await file.arrayBuffer());
+      const imageType = file.type.includes('png') ? 'png' : 'jpeg';
+
+      newBytes = await addImageWatermark(State.pdfBytes, {
+        imageBytes,
+        imageType,
+        scale: parseFloat($('watermark-image-scale').value) || 0.3,
+        opacity: parseFloat($('watermark-image-opacity').value) || 0.15,
+        rotation: parseInt($('watermark-image-rotation').value) || 0,
+        position: $('watermark-image-position').value || 'center',
+        pages: $('watermark-pages').value || 'all',
+        currentPage: State.currentPage,
+      });
+    } else {
+      const text = $('watermark-text').value.trim();
+      if (!text) { hideLoading(); toast('Enter watermark text', 'warning'); return; }
+
+      newBytes = await addWatermark(State.pdfBytes, {
+        text,
+        fontSize: parseInt($('watermark-size').value) || 60,
+        rotation: parseInt($('watermark-rotation').value) || -45,
+        opacity: parseFloat($('watermark-opacity').value) || 0.15,
+        color: $('watermark-color').value || '#888888',
+        pages: $('watermark-pages').value || 'all',
+        currentPage: State.currentPage,
+      });
+    }
 
     closeWatermarkModal();
     await reloadAfterEdit(newBytes);
@@ -4058,6 +4080,35 @@ function wireEvents() {
   $('btn-watermark-execute').addEventListener('click', executeWatermark);
   $('watermark-opacity').addEventListener('input', () => {
     $('watermark-opacity-value').textContent = Math.round(parseFloat($('watermark-opacity').value) * 100) + '%';
+  });
+
+  // Watermark tab switching (text / image)
+  $('watermark-tab-text')?.addEventListener('click', () => {
+    $('watermark-tab-text').classList.add('active');
+    $('watermark-tab-image').classList.remove('active');
+    $('watermark-text-fields').classList.remove('hidden');
+    $('watermark-image-fields').classList.add('hidden');
+  });
+  $('watermark-tab-image')?.addEventListener('click', () => {
+    $('watermark-tab-image').classList.add('active');
+    $('watermark-tab-text').classList.remove('active');
+    $('watermark-image-fields').classList.remove('hidden');
+    $('watermark-text-fields').classList.add('hidden');
+  });
+  // Image watermark controls
+  $('watermark-image-file')?.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const thumb = $('watermark-image-thumb');
+      thumb.src = URL.createObjectURL(file);
+      $('watermark-image-preview').classList.remove('hidden');
+    }
+  });
+  $('watermark-image-scale')?.addEventListener('input', (e) => {
+    $('watermark-image-scale-value').textContent = Math.round(parseFloat(e.target.value) * 100) + '%';
+  });
+  $('watermark-image-opacity')?.addEventListener('input', (e) => {
+    $('watermark-image-opacity-value').textContent = Math.round(parseFloat(e.target.value) * 100) + '%';
   });
 
   // Normalize Page Sizes modal
