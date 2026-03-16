@@ -5,7 +5,7 @@
 
 /* ── Toast Notifications ── */
 
-export function toast(message, type = 'info', duration = 3500) {
+export function toast(message, type = 'info', duration = 3500, { html = false } = {}) {
   const container = document.getElementById('toast-container');
   const el = document.createElement('div');
   el.className = `toast ${type}`;
@@ -13,7 +13,11 @@ export function toast(message, type = 'info', duration = 3500) {
   const iconSpan = document.createElement('span');
   iconSpan.textContent = icons[type] || '';
   const msgSpan = document.createElement('span');
-  msgSpan.textContent = message;
+  if (html) {
+    msgSpan.innerHTML = message;
+  } else {
+    msgSpan.textContent = message;
+  }
   el.appendChild(iconSpan);
   el.appendChild(msgSpan);
   container.appendChild(el);
