@@ -18,6 +18,7 @@ export default [
         fetch: 'readonly',
         URL: 'readonly',
         Blob: 'readonly',
+        FormData: 'readonly',
         File: 'readonly',
         FileReader: 'readonly',
         HTMLElement: 'readonly',

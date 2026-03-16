@@ -93,6 +93,7 @@ import { setLabelRange, getPageLabel, getLabelRanges, clearLabels, removeLabelRa
 import { trapFocus as a11yTrapFocus, releaseFocus as a11yReleaseFocus, announceToScreenReader, cycleRegion } from './a11y.js';
 import { initOnboarding, showTip } from './onboarding.js';
 import { initMenuActions } from './menu-actions.js';
+import { parseIntegrationParams, postToCallback } from './integration.js';
 
 /* ═══════════════════ State ═══════════════════ */
 
@@ -111,6 +112,7 @@ const State = {
   formFields: [],  // detected form field descriptors
   pdfLibDoc: null,  // pdf-lib document for form support
   _viewport: null,  // cached viewport for find highlights
+  integration: null, // integration params when launched from external dashboard
 };
 
 /* ═══════════════════ DOM References ═══════════════════ */
@@ -2213,7 +2215,27 @@ async function handleSave() {
     // Reload the new bytes into the viewer
     await reloadAfterEdit(result.bytes);
 
-    toast('Saved — annotations baked into document', 'success');
+    // Send to dashboard callback if in integration mode
+    if (State.integration?.callbackUrl) {
+      try {
+        toast('Sending to dashboard\u2026', 'info');
+        await postToCallback(State.integration.callbackUrl, result.bytes, {
+          woId: State.integration.woId,
+          fileName: State.integration.fileName,
+        });
+        if (State.integration.returnUrl) {
+          const safeUrl = State.integration.returnUrl.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+          toast(`Saved and sent to dashboard. <a href="${safeUrl}" style="color:inherit;text-decoration:underline">Return to dashboard</a>`, 'success', 10000, { html: true });
+        } else {
+          toast('Saved and sent to dashboard', 'success');
+        }
+      } catch (callbackErr) {
+        console.error('Callback failed:', callbackErr);
+        toast('Saved locally but failed to send to dashboard. Use Save & Download for a local copy.', 'warning', 8000);
+      }
+    } else {
+      toast('Saved \u2014 annotations baked into document', 'success');
+    }
   } catch (err) {
     console.error('Save failed:', err);
     toast('Save failed: ' + err.message, 'error');
@@ -6300,15 +6322,15 @@ function selectTool(toolName) {
 /* ═══════════════════ Public API (for testing & URL loading) ═══════════════════ */
 
 window.Mudbrick = {
-  /** Load a PDF from a URL (useful for testing and link sharing) */
-  async loadFromURL(url) {
-    showLoading('Loading PDF from URL…');
+  /** Load a PDF from a URL (useful for testing, link sharing, and dashboard integration) */
+  async loadFromURL(url, displayName) {
+    showLoading('Loading PDF from URL\u2026');
     try {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const buf = await resp.arrayBuffer();
       const bytes = new Uint8Array(buf);
-      const name = url.split('/').pop() || 'document.pdf';
+      const name = displayName || url.split('/').pop()?.split('?')[0] || 'document.pdf';
       await openPDF(bytes, name, bytes.length);
       toast(`Opened ${name}`, 'success');
     } catch (e) {
@@ -6319,6 +6341,7 @@ window.Mudbrick = {
     }
   },
   getState: () => State,
+  getIntegration: () => State.integration,
   goToPage,
   setZoom,
   getCanvas,
@@ -6330,10 +6353,10 @@ window.Mudbrick = {
 /* ═══════════════════ Boot ═══════════════════ */
 
 boot().then(() => {
-  // Auto-load PDF from ?url= query param (useful for testing & sharing)
-  const params = new URLSearchParams(window.location.search);
-  const pdfUrl = params.get('url');
-  if (pdfUrl) {
-    window.Mudbrick.loadFromURL(pdfUrl);
+  // Auto-load PDF from query params (supports standalone ?url= and dashboard integration)
+  const integration = parseIntegrationParams();
+  if (integration) {
+    State.integration = integration;
+    window.Mudbrick.loadFromURL(integration.fileUrl, integration.fileName);
   }
 }).catch(e => console.error('Boot failed:', e));
