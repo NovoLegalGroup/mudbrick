@@ -1,0 +1,160 @@
+/* Mudbrick v2 -- Annotation Report Styles */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dialog {
+  background: var(--mb-surface);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  width: 640px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--mb-border-light);
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--mb-text);
+  margin: 0;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--mb-text-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.closeBtn:hover {
+  background: var(--mb-hover);
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.summary {
+  display: flex;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--mb-border-light);
+  margin-bottom: 12px;
+}
+
+.summaryItem {
+  font-size: 13px;
+  color: var(--mb-text-secondary);
+}
+
+.summaryCount {
+  font-weight: 600;
+  color: var(--mb-text);
+}
+
+.pageSection {
+  margin-bottom: 16px;
+}
+
+.pageHeader {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mb-text);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--mb-border-light);
+  margin-bottom: 8px;
+}
+
+.annotItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.annotItem:hover {
+  background: var(--mb-hover);
+}
+
+.annotType {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  min-width: 70px;
+  color: var(--mb-text-secondary);
+  padding-top: 1px;
+}
+
+.annotContent {
+  color: var(--mb-text);
+  flex: 1;
+  word-break: break-word;
+}
+
+.emptyState {
+  text-align: center;
+  color: var(--mb-text-secondary);
+  font-size: 14px;
+  padding: 40px 0;
+}
+
+.actions {
+  padding: 16px 20px;
+  border-top: 1px solid var(--mb-border-light);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.exportBtn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid var(--mb-border);
+  background: var(--mb-surface);
+  color: var(--mb-text);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.exportBtn:hover {
+  background: var(--mb-hover);
+}
+
+.cancelBtn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid var(--mb-border);
+  background: var(--mb-surface);
+  color: var(--mb-text);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.cancelBtn:hover {
+  background: var(--mb-hover);
+}

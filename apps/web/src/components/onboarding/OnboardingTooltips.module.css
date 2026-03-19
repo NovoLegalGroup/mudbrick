@@ -1,0 +1,106 @@
+/* Mudbrick v2 -- Onboarding Tooltips Styles */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 9000;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 9001;
+  background: var(--mb-surface);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  padding: 16px 20px;
+  max-width: 320px;
+  width: max-content;
+}
+
+.tooltipTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mb-text);
+  margin: 0 0 6px 0;
+}
+
+.tooltipText {
+  font-size: 13px;
+  color: var(--mb-text-secondary);
+  margin: 0 0 14px 0;
+  line-height: 1.4;
+}
+
+.tooltipActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stepIndicator {
+  font-size: 12px;
+  color: var(--mb-text-secondary);
+}
+
+.btnGroup {
+  display: flex;
+  gap: 8px;
+}
+
+.skipBtn {
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: var(--mb-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.skipBtn:hover {
+  background: var(--mb-hover);
+}
+
+.nextBtn {
+  padding: 6px 14px;
+  border: none;
+  background: var(--mb-primary);
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+}
+
+.nextBtn:hover {
+  opacity: 0.9;
+}
+
+.arrow {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--mb-surface);
+  transform: rotate(45deg);
+}
+
+.arrowTop {
+  top: -6px;
+  left: 24px;
+}
+
+.arrowBottom {
+  bottom: -6px;
+  left: 24px;
+}
+
+.arrowLeft {
+  left: -6px;
+  top: 24px;
+}
+
+.arrowRight {
+  right: -6px;
+  top: 24px;
+}

@@ -43,6 +43,13 @@ import type {
   FormExportResponse,
   FormImportRequest,
   FormImportResponse,
+  CompareResponse,
+  EncryptRequest,
+  EncryptResponse,
+  MetadataResponse,
+  MetadataUpdateRequest,
+  MetadataUpdateResponse,
+  SanitizeResponse,
 } from '../types/api';
 import type { PageAnnotations } from '../types/annotation';
 
@@ -470,6 +477,62 @@ class ApiClient {
         output_dir: outputDir,
         filename_prefix: filenamePrefix ?? undefined,
       }),
+    });
+  }
+
+  // -- Phase 4: Document Comparison --
+
+  /**
+   * Compare two PDF documents page by page.
+   */
+  async compareDocuments(filePath1: string, filePath2: string): Promise<CompareResponse> {
+    return this.request('/compare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_path_1: filePath1, file_path_2: filePath2 }),
+    });
+  }
+
+  // -- Phase 4: Security / Encryption --
+
+  /**
+   * Encrypt a PDF with AES-256.
+   */
+  async encryptDocument(sessionId: string, request: EncryptRequest): Promise<EncryptResponse> {
+    return this.request(`/security/${sessionId}/encrypt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+  }
+
+  /**
+   * Get PDF metadata.
+   */
+  async getSecurityMetadata(sessionId: string): Promise<MetadataResponse> {
+    return this.request(`/security/${sessionId}/metadata`);
+  }
+
+  /**
+   * Update PDF metadata fields.
+   */
+  async updateSecurityMetadata(
+    sessionId: string,
+    request: MetadataUpdateRequest,
+  ): Promise<MetadataUpdateResponse> {
+    return this.request(`/security/${sessionId}/metadata`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+  }
+
+  /**
+   * Sanitize the PDF: strip metadata, XMP, JavaScript, hidden content.
+   */
+  async sanitizeDocument(sessionId: string): Promise<SanitizeResponse> {
+    return this.request(`/security/${sessionId}/sanitize`, {
+      method: 'POST',
     });
   }
 

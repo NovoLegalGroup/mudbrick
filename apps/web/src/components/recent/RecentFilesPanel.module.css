@@ -1,0 +1,124 @@
+/* Mudbrick v2 -- Recent Files Panel Styles */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 500px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mb-text);
+  margin: 0;
+}
+
+.clearBtn {
+  padding: 4px 10px;
+  border: none;
+  background: none;
+  color: var(--mb-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.clearBtn:hover {
+  background: var(--mb-hover);
+  color: var(--mb-text);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fileItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+
+.fileItem:hover {
+  background: var(--mb-hover);
+  border-color: var(--mb-border-light);
+}
+
+.fileItem:focus-visible {
+  outline: 2px solid var(--mb-primary);
+  outline-offset: -2px;
+}
+
+.fileIcon {
+  font-size: 24px;
+  opacity: 0.6;
+  flex-shrink: 0;
+  width: 28px;
+  text-align: center;
+}
+
+.fileInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.fileName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mb-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileMeta {
+  font-size: 11px;
+  color: var(--mb-text-secondary);
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.removeBtn {
+  padding: 4px;
+  border: none;
+  background: none;
+  color: var(--mb-text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  border-radius: 4px;
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.fileItem:hover .removeBtn {
+  opacity: 1;
+}
+
+.removeBtn:hover {
+  background: var(--mb-hover);
+  color: var(--mb-danger, #ef4444);
+}
+
+.emptyState {
+  color: var(--mb-text-secondary);
+  font-size: 13px;
+  text-align: center;
+  padding: 20px;
+}

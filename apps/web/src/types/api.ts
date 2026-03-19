@@ -376,3 +376,68 @@ export interface SplitResponse {
   parts: SplitPart[];
   total_parts: number;
 }
+
+// ── Phase 4: Document Comparison Types ──
+
+export interface PageChangeItem {
+  page: number;
+  type: 'added' | 'deleted' | 'modified' | 'unchanged';
+  diff_score: number;
+}
+
+export interface ComparisonSummary {
+  added: number;
+  deleted: number;
+  modified: number;
+  unchanged: number;
+}
+
+export interface CompareResponse {
+  changes: PageChangeItem[];
+  summary: ComparisonSummary;
+}
+
+// ── Phase 4: Security / Encryption Types ──
+
+export interface EncryptRequest {
+  user_password: string;
+  owner_password: string;
+  allow_print: boolean;
+  allow_copy: boolean;
+  allow_modify: boolean;
+  allow_annotate: boolean;
+}
+
+export interface EncryptResponse {
+  success: boolean;
+  encrypted: boolean;
+  permissions: Record<string, boolean>;
+}
+
+export interface MetadataResponse {
+  title: string;
+  author: string;
+  subject: string;
+  keywords: string;
+  creator: string;
+  producer: string;
+  creation_date: string;
+  mod_date: string;
+}
+
+export interface MetadataUpdateRequest {
+  title?: string;
+  author?: string;
+  subject?: string;
+  keywords?: string;
+}
+
+export interface MetadataUpdateResponse {
+  success: boolean;
+  updated_fields: string[];
+}
+
+export interface SanitizeResponse {
+  success: boolean;
+  removed: string[];
+}

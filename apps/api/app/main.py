@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .dependencies import get_session_manager
 from .routers import (
     bates,
+    compare,
     documents,
     exhibits,
     export,
@@ -22,6 +23,7 @@ from .routers import (
     ocr,
     pages,
     redaction,
+    security,
     split,
     text,
     thumbnails,
@@ -77,6 +79,8 @@ app.include_router(redaction.router)
 app.include_router(ocr.router)
 app.include_router(text.router)
 app.include_router(split.router)
+app.include_router(compare.router)
+app.include_router(security.router)
 
 
 @app.get("/api/health")

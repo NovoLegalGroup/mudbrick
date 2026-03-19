@@ -1,0 +1,243 @@
+/* Mudbrick v2 -- Comparison Viewer Styles */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dialog {
+  background: var(--mb-surface);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  width: 90vw;
+  max-width: 1200px;
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--mb-border-light);
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--mb-text);
+  margin: 0;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--mb-text-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.closeBtn:hover {
+  background: var(--mb-hover);
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px 20px;
+  gap: 12px;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.fileInput {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fileInput label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mb-text-secondary);
+}
+
+.browseBtn {
+  padding: 6px 14px;
+  border-radius: 4px;
+  border: 1px solid var(--mb-border);
+  background: var(--mb-surface);
+  color: var(--mb-text);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.browseBtn:hover {
+  background: var(--mb-hover);
+}
+
+.compareBtn {
+  padding: 6px 16px;
+  border-radius: 4px;
+  border: none;
+  background: var(--mb-primary);
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.compareBtn:hover {
+  opacity: 0.9;
+}
+
+.compareBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fileName {
+  font-size: 12px;
+  color: var(--mb-text-secondary);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary {
+  display: flex;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--mb-border-light);
+}
+
+.summaryItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--mb-text);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  padding: 0 6px;
+}
+
+.badgeAdded {
+  background: #22c55e;
+}
+
+.badgeDeleted {
+  background: #ef4444;
+}
+
+.badgeModified {
+  background: #eab308;
+  color: #1a1a1a;
+}
+
+.badgeUnchanged {
+  background: #9ca3af;
+}
+
+.changesList {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.changeRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--mb-border-light);
+  font-size: 13px;
+}
+
+.changeRow:hover {
+  background: var(--mb-hover);
+}
+
+.changeType {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 70px;
+}
+
+.typeAdded {
+  color: #22c55e;
+}
+
+.typeDeleted {
+  color: #ef4444;
+}
+
+.typeModified {
+  color: #eab308;
+}
+
+.typeUnchanged {
+  color: #9ca3af;
+}
+
+.pageNum {
+  color: var(--mb-text);
+  font-weight: 500;
+}
+
+.diffScore {
+  margin-left: auto;
+  color: var(--mb-text-secondary);
+  font-size: 12px;
+}
+
+.emptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: var(--mb-text-secondary);
+  font-size: 14px;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 8px;
+  color: var(--mb-text-secondary);
+  font-size: 14px;
+}

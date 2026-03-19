@@ -1,0 +1,22 @@
+/* Mudbrick v2 -- Skip Link Styles */
+
+.skipLink {
+  position: fixed;
+  top: -100%;
+  left: 16px;
+  z-index: 10000;
+  padding: 8px 16px;
+  background: var(--mb-primary);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 0 0 6px 6px;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+
+.skipLink:focus {
+  top: 0;
+  outline: 2px solid white;
+  outline-offset: 2px;
+}

@@ -15,9 +15,16 @@ import { PropertyPanel } from './components/annotations/PropertyPanel';
 import { ExportDialog } from './components/export/ExportDialog';
 import { ExportToolsBar } from './components/export/ExportToolsBar';
 import { ImageExportDialog } from './components/export/ImageExportDialog';
+import { AnnotationReport } from './components/export/AnnotationReport';
 import { BatesDialog } from './components/legal/BatesDialog';
 import { HeaderFooterDialog } from './components/legal/HeaderFooterDialog';
 import { LegalToolsBar } from './components/legal/LegalToolsBar';
+import { ComparisonViewer } from './components/compare/ComparisonViewer';
+import { SecurityPanel } from './components/security/SecurityPanel';
+import { SkipLink } from './components/a11y/SkipLink';
+import { AnnouncerProvider } from './components/a11y/Announcer';
+import { OnboardingTooltips } from './components/onboarding/OnboardingTooltips';
+import { RecentFilesPanel } from './components/recent/RecentFilesPanel';
 import { ToastContainer } from './components/shared/Toast';
 import { OfflineIndicator } from './components/shared/OfflineIndicator';
 import { useDocumentStore } from './stores/documentStore';
@@ -245,100 +252,120 @@ export function App() {
   // No document loaded: show welcome screen
   if (!document) {
     return (
-      <div className="app-layout">
-        <header className="app-toolbar">
-          <h1 className="app-title">Mudbrick</h1>
-        </header>
-        <div className="app-body">
-          <main className="app-main">
-            <WelcomeScreen onOpenFile={handleOpenFile} loading={loading} />
-          </main>
+      <AnnouncerProvider>
+        <SkipLink targetId="main-content" />
+        <div className="app-layout">
+          <header className="app-toolbar">
+            <h1 className="app-title">Mudbrick</h1>
+          </header>
+          <div className="app-body">
+            <main id="main-content" className="app-main">
+              <WelcomeScreen onOpenFile={handleOpenFile} loading={loading} />
+              <RecentFilesPanel onOpenFile={handleOpenFile} />
+            </main>
+          </div>
+          <LoadingOverlay visible={loading} message="Opening document..." />
+          <ToastContainer />
+          <OfflineIndicator />
+          <OnboardingTooltips />
         </div>
-        <LoadingOverlay visible={loading} message="Opening document..." />
-        <ToastContainer />
-        <OfflineIndicator />
-      </div>
+      </AnnouncerProvider>
     );
   }
 
   // Document loaded: show editor layout (viewer + sidebar placeholders)
   return (
-    <div className="app-layout">
-      <header className="app-toolbar">
-        <h1 className="app-title">Mudbrick</h1>
-        <span
-          style={{
-            marginLeft: '16px',
-            fontSize: '13px',
-            color: 'var(--mb-toolbar-text)',
-            opacity: 0.8,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {document.fileName}
-        </span>
-        <div style={{ marginLeft: '16px' }}>
-          <Toolbar />
-        </div>
-        <LegalToolsBar
-          onOpenBates={() => openModal('bates')}
-          onOpenHeaders={() => openModal('headers')}
-        />
-        <ExportToolsBar
-          onOpenPdfExport={() => openModal('export')}
-          onOpenImageExport={() => openModal('export-images')}
-        />
-        {error && (
+    <AnnouncerProvider>
+      <SkipLink targetId="main-content" />
+      <div className="app-layout">
+        <header className="app-toolbar">
+          <h1 className="app-title">Mudbrick</h1>
           <span
             style={{
-              marginLeft: 'auto',
-              fontSize: '12px',
-              color: 'var(--mb-danger)',
+              marginLeft: '16px',
+              fontSize: '13px',
+              color: 'var(--mb-toolbar-text)',
+              opacity: 0.8,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}
           >
-            {error}
+            {document.fileName}
           </span>
-        )}
-      </header>
-      <div className="app-body">
-        {sidebarOpen && (
-          <aside className="app-sidebar" style={{ padding: 0 }}>
-            <ThumbnailSidebar
-              sessionId={document.sessionId}
-              onNavigate={handleNavigateToPage}
-              onPageOperation={handlePageOperation}
-              onReorder={handleReorder}
-            />
-          </aside>
-        )}
-        <main className="app-main" style={{ flexDirection: 'column', justifyContent: 'stretch' }}>
-          <PdfViewer sessionId={document.sessionId} version={document.currentVersion} />
-        </main>
-        <PropertyPanel />
+          <div style={{ marginLeft: '16px' }}>
+            <Toolbar />
+          </div>
+          <LegalToolsBar
+            onOpenBates={() => openModal('bates')}
+            onOpenHeaders={() => openModal('headers')}
+          />
+          <ExportToolsBar
+            onOpenPdfExport={() => openModal('export')}
+            onOpenImageExport={() => openModal('export-images')}
+          />
+          {error && (
+            <span
+              style={{
+                marginLeft: 'auto',
+                fontSize: '12px',
+                color: 'var(--mb-danger)',
+              }}
+            >
+              {error}
+            </span>
+          )}
+        </header>
+        <div className="app-body">
+          {sidebarOpen && (
+            <aside className="app-sidebar" style={{ padding: 0 }}>
+              <ThumbnailSidebar
+                sessionId={document.sessionId}
+                onNavigate={handleNavigateToPage}
+                onPageOperation={handlePageOperation}
+                onReorder={handleReorder}
+              />
+            </aside>
+          )}
+          <main id="main-content" className="app-main" style={{ flexDirection: 'column', justifyContent: 'stretch' }}>
+            <PdfViewer sessionId={document.sessionId} version={document.currentVersion} />
+          </main>
+          <PropertyPanel />
+        </div>
+        <BatesDialog
+          open={activeModal === 'bates'}
+          onClose={closeModal}
+          onApplied={handleLegalToolApplied}
+        />
+        <HeaderFooterDialog
+          open={activeModal === 'headers'}
+          onClose={closeModal}
+          onApplied={handleLegalToolApplied}
+        />
+        <ExportDialog
+          open={activeModal === 'export'}
+          onClose={closeModal}
+        />
+        <ImageExportDialog
+          open={activeModal === 'export-images'}
+          onClose={closeModal}
+        />
+        <ComparisonViewer
+          open={activeModal === 'compare'}
+          onClose={closeModal}
+        />
+        <SecurityPanel
+          open={activeModal === 'security'}
+          onClose={closeModal}
+        />
+        <AnnotationReport
+          open={activeModal === 'annotation-report'}
+          onClose={closeModal}
+        />
+        <LoadingOverlay visible={loading} message="Processing..." />
+        <ToastContainer />
+        <OfflineIndicator />
       </div>
-      <BatesDialog
-        open={activeModal === 'bates'}
-        onClose={closeModal}
-        onApplied={handleLegalToolApplied}
-      />
-      <HeaderFooterDialog
-        open={activeModal === 'headers'}
-        onClose={closeModal}
-        onApplied={handleLegalToolApplied}
-      />
-      <ExportDialog
-        open={activeModal === 'export'}
-        onClose={closeModal}
-      />
-      <ImageExportDialog
-        open={activeModal === 'export-images'}
-        onClose={closeModal}
-      />
-      <LoadingOverlay visible={loading} message="Processing..." />
-      <ToastContainer />
-      <OfflineIndicator />
-    </div>
+    </AnnouncerProvider>
   );
 }

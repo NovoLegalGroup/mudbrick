@@ -138,11 +138,13 @@ async def export_document_images(
     doc = PdfEngine.open_from_file(str(pdf_path))
     try:
         if request.pages:
-            page_numbers = [
-                page_num
-                for page_num in request.pages
-                if 1 <= page_num <= doc.page_count
-            ]
+            page_numbers = list(
+                dict.fromkeys(
+                    page_num
+                    for page_num in request.pages
+                    if 1 <= page_num <= doc.page_count
+                )
+            )
         else:
             page_numbers = list(range(1, doc.page_count + 1))
 
