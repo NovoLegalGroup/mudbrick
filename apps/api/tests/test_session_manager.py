@@ -1,185 +1,178 @@
 """
-Mudbrick v2 -- Tests for Session Manager
+Mudbrick v2 -- Session Manager Tests (Desktop / Local Filesystem)
 """
-
-from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from app.services.adapters.local_kv import LocalKVAdapter
-from app.services.adapters.local_storage import LocalBlobAdapter
 from app.services.session_manager import SessionManager
 
 
-@pytest.fixture
-def session_mgr(tmp_data_dir: Path) -> SessionManager:
-    """Create a SessionManager with local adapters pointing to tmp dir."""
-    blob = LocalBlobAdapter(str(tmp_data_dir))
-    kv = LocalKVAdapter(str(tmp_data_dir))
-    mgr = SessionManager(blob=blob, kv=kv)
-    mgr.max_versions = 5  # Smaller limit for testing
-    return mgr
-
-
-@pytest.mark.asyncio
 class TestSessionManager:
-    async def test_create_session(self, session_mgr: SessionManager, sample_pdf_bytes: bytes):
-        meta = await session_mgr.create_session(sample_pdf_bytes, "test.pdf")
+    """Tests for local filesystem session manager."""
+
+    def test_open_file(self, session_manager: SessionManager, sample_pdf_file: Path):
+        """Opening a file creates a session with correct metadata."""
+        meta = session_manager.open_file(str(sample_pdf_file))
+
         assert meta.session_id
+        assert meta.file_path == str(sample_pdf_file)
         assert meta.file_name == "test.pdf"
-        assert meta.file_size == len(sample_pdf_bytes)
+        assert meta.file_size > 0
         assert meta.current_version == 1
         assert len(meta.operations) == 1
-        assert meta.operations[0].operation == "upload"
+        assert meta.operations[0].operation == "open"
 
-    async def test_get_session(self, session_mgr: SessionManager, sample_pdf_bytes: bytes):
-        meta = await session_mgr.create_session(sample_pdf_bytes)
-        retrieved = await session_mgr.get_session(meta.session_id)
-        assert retrieved is not None
-        assert retrieved.session_id == meta.session_id
-
-    async def test_get_nonexistent_session(self, session_mgr: SessionManager):
-        result = await session_mgr.get_session("nonexistent")
-        assert result is None
-
-    async def test_get_current_pdf(self, session_mgr: SessionManager, sample_pdf_bytes: bytes):
-        meta = await session_mgr.create_session(sample_pdf_bytes)
-        pdf = await session_mgr.get_current_pdf(meta.session_id)
-        assert pdf == sample_pdf_bytes
-
-    async def test_save_pdf_creates_version(
-        self, session_mgr: SessionManager, sample_pdf_bytes: bytes
+    def test_open_file_creates_working_copy(
+        self, session_manager: SessionManager, sample_pdf_file: Path
     ):
-        meta = await session_mgr.create_session(sample_pdf_bytes)
+        """Opening a file copies it to session dir as current.pdf and v1.pdf."""
+        meta = session_manager.open_file(str(sample_pdf_file))
         sid = meta.session_id
 
-        new_pdf = sample_pdf_bytes + b"\n% modified"
-        version = await session_mgr.save_pdf(sid, new_pdf, "rotate")
-        assert version == 2
+        current = session_manager.get_current_pdf_path(sid)
+        assert current is not None
+        assert current.exists()
 
-        updated = await session_mgr.get_session(sid)
-        assert updated is not None
+        version_path = session_manager._version_pdf_path(sid, 1)
+        assert version_path.exists()
+
+    def test_open_file_not_found(self, session_manager: SessionManager):
+        """Opening a non-existent file raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError):
+            session_manager.open_file("C:/nonexistent/fake.pdf")
+
+    def test_get_current_pdf_bytes(
+        self, session_manager: SessionManager, sample_pdf_file: Path, sample_pdf_bytes: bytes
+    ):
+        """Can read the current PDF as bytes."""
+        meta = session_manager.open_file(str(sample_pdf_file))
+        data = session_manager.get_current_pdf_bytes(meta.session_id)
+        assert data is not None
+        assert data == sample_pdf_bytes
+
+    def test_save_current_pdf_creates_version(
+        self, session_manager: SessionManager, sample_pdf_file: Path, sample_pdf_bytes: bytes
+    ):
+        """Saving new PDF bytes creates a new version."""
+        meta = session_manager.open_file(str(sample_pdf_file))
+        sid = meta.session_id
+
+        new_version = session_manager.save_current_pdf(sid, sample_pdf_bytes, "rotate 90deg")
+        assert new_version == 2
+
+        updated = session_manager.get_session(sid)
         assert updated.current_version == 2
         assert updated.max_version == 2
 
-        # Current PDF should be the new one
-        current = await session_mgr.get_current_pdf(sid)
-        assert current == new_pdf
-
-    async def test_undo_redo(self, session_mgr: SessionManager, sample_pdf_bytes: bytes):
-        meta = await session_mgr.create_session(sample_pdf_bytes)
+    def test_undo_redo(
+        self, session_manager: SessionManager, sample_pdf_file: Path, sample_pdf_bytes: bytes
+    ):
+        """Undo/redo navigate through version history."""
+        meta = session_manager.open_file(str(sample_pdf_file))
         sid = meta.session_id
 
-        # Make a modification
-        modified = sample_pdf_bytes + b"\n% v2"
-        await session_mgr.save_pdf(sid, modified, "rotate")
+        # Create v2
+        session_manager.save_current_pdf(sid, sample_pdf_bytes, "rotate")
 
-        # Undo
-        result = await session_mgr.undo(sid)
+        # Undo to v1
+        result = session_manager.undo(sid)
         assert result is not None
         assert result.version == 1
 
-        # Current should be original
-        current = await session_mgr.get_current_pdf(sid)
-        assert current == sample_pdf_bytes
-
-        # Redo
-        result = await session_mgr.redo(sid)
+        # Redo to v2
+        result = session_manager.redo(sid)
         assert result is not None
         assert result.version == 2
 
-        current = await session_mgr.get_current_pdf(sid)
-        assert current == modified
-
-    async def test_undo_at_beginning(self, session_mgr: SessionManager, sample_pdf_bytes: bytes):
-        meta = await session_mgr.create_session(sample_pdf_bytes)
-        result = await session_mgr.undo(meta.session_id)
-        assert result is None
-
-    async def test_redo_at_end(self, session_mgr: SessionManager, sample_pdf_bytes: bytes):
-        meta = await session_mgr.create_session(sample_pdf_bytes)
-        result = await session_mgr.redo(meta.session_id)
-        assert result is None
-
-    async def test_save_truncates_redo_history(
-        self, session_mgr: SessionManager, sample_pdf_bytes: bytes
+    def test_undo_at_oldest_returns_none(
+        self, session_manager: SessionManager, sample_pdf_file: Path
     ):
-        meta = await session_mgr.create_session(sample_pdf_bytes)
-        sid = meta.session_id
-
-        # Create v2 and v3
-        await session_mgr.save_pdf(sid, sample_pdf_bytes + b" v2", "edit1")
-        await session_mgr.save_pdf(sid, sample_pdf_bytes + b" v3", "edit2")
-
-        # Undo back to v1
-        await session_mgr.undo(sid)
-        await session_mgr.undo(sid)
-
-        # Make a new edit from v1 -- should truncate v2 and v3
-        await session_mgr.save_pdf(sid, sample_pdf_bytes + b" branch", "branch")
-
-        updated = await session_mgr.get_session(sid)
-        assert updated is not None
-        assert updated.current_version == 2
-        assert updated.max_version == 2
-
-        # Redo should not be possible (history was truncated)
-        result = await session_mgr.redo(sid)
+        """Undo at the oldest version returns None."""
+        meta = session_manager.open_file(str(sample_pdf_file))
+        result = session_manager.undo(meta.session_id)
         assert result is None
 
-    async def test_version_eviction(
-        self, session_mgr: SessionManager, sample_pdf_bytes: bytes
+    def test_redo_at_newest_returns_none(
+        self, session_manager: SessionManager, sample_pdf_file: Path
     ):
-        meta = await session_mgr.create_session(sample_pdf_bytes)
+        """Redo at the newest version returns None."""
+        meta = session_manager.open_file(str(sample_pdf_file))
+        result = session_manager.redo(meta.session_id)
+        assert result is None
+
+    def test_close_session_removes_files(
+        self, session_manager: SessionManager, sample_pdf_file: Path
+    ):
+        """Closing a session removes all session files."""
+        meta = session_manager.open_file(str(sample_pdf_file))
         sid = meta.session_id
 
-        # Create versions up to the limit (max_versions=5)
-        for i in range(6):
-            await session_mgr.save_pdf(
-                sid, sample_pdf_bytes + f" v{i+2}".encode(), f"edit{i+1}"
-            )
+        session_dir = session_manager._session_dir(sid)
+        assert session_dir.exists()
 
-        updated = await session_mgr.get_session(sid)
-        assert updated is not None
-        assert updated.current_version == 7
-        # Oldest version should have been evicted
-        assert updated.oldest_version > 1
+        session_manager.close_session(sid)
+        assert not session_dir.exists()
+        assert session_manager.get_session(sid) is None
 
-    async def test_delete_session(self, session_mgr: SessionManager, sample_pdf_bytes: bytes):
-        meta = await session_mgr.create_session(sample_pdf_bytes)
+    def test_save_to_original(
+        self, session_manager: SessionManager, sample_pdf_file: Path, sample_pdf_bytes: bytes
+    ):
+        """Save writes current PDF back to original file path."""
+        meta = session_manager.open_file(str(sample_pdf_file))
         sid = meta.session_id
 
-        deleted = await session_mgr.delete_session(sid)
-        assert deleted is True
+        session_manager.save_current_pdf(sid, sample_pdf_bytes, "test op")
 
-        # Session should be gone
-        assert await session_mgr.get_session(sid) is None
-        assert await session_mgr.get_current_pdf(sid) is None
+        path = session_manager.save_to_original(sid)
+        assert path == str(sample_pdf_file)
+        assert sample_pdf_file.exists()
 
-    async def test_delete_nonexistent_session(self, session_mgr: SessionManager):
-        deleted = await session_mgr.delete_session("nonexistent")
-        assert deleted is False
-
-    async def test_get_versions(self, session_mgr: SessionManager, sample_pdf_bytes: bytes):
-        meta = await session_mgr.create_session(sample_pdf_bytes)
+    def test_save_as(
+        self, session_manager: SessionManager, sample_pdf_file: Path, tmp_path: Path
+    ):
+        """Save-as writes to a new path and updates session metadata."""
+        meta = session_manager.open_file(str(sample_pdf_file))
         sid = meta.session_id
 
-        await session_mgr.save_pdf(sid, sample_pdf_bytes + b" v2", "rotate")
-        await session_mgr.save_pdf(sid, sample_pdf_bytes + b" v3", "delete")
+        new_path = tmp_path / "output" / "saved.pdf"
+        result = session_manager.save_as(sid, str(new_path))
+        assert result == str(new_path)
+        assert new_path.exists()
 
-        versions = await session_mgr.get_versions(sid)
+        updated = session_manager.get_session(sid)
+        assert updated.file_path == str(new_path)
+        assert updated.file_name == "saved.pdf"
+
+    def test_get_versions(
+        self, session_manager: SessionManager, sample_pdf_file: Path, sample_pdf_bytes: bytes
+    ):
+        """get_versions returns all available versions."""
+        meta = session_manager.open_file(str(sample_pdf_file))
+        sid = meta.session_id
+
+        session_manager.save_current_pdf(sid, sample_pdf_bytes, "rotate")
+        session_manager.save_current_pdf(sid, sample_pdf_bytes, "delete")
+
+        versions = session_manager.get_versions(sid)
         assert len(versions) == 3
-        assert versions[0].operation == "upload"
-        assert versions[1].operation == "rotate"
-        assert versions[2].operation == "delete"
-        assert versions[2].is_current is True
+        assert versions[0].version == 1
+        assert versions[0].operation == "open"
+        assert versions[2].version == 3
+        assert versions[2].is_current
 
-    async def test_update_metadata(self, session_mgr: SessionManager, sample_pdf_bytes: bytes):
-        meta = await session_mgr.create_session(sample_pdf_bytes)
-        updated = await session_mgr.update_metadata(
-            meta.session_id, page_count=10, file_name="renamed.pdf"
-        )
-        assert updated.page_count == 10
-        assert updated.file_name == "renamed.pdf"
+    def test_thumbnail_caching(
+        self, session_manager: SessionManager, sample_pdf_file: Path
+    ):
+        """Thumbnail cache stores and retrieves PNG bytes."""
+        meta = session_manager.open_file(str(sample_pdf_file))
+        sid = meta.session_id
+
+        assert session_manager.get_cached_thumbnail(sid, 1, 200) is None
+
+        fake_png = b"\x89PNG\r\n\x1a\ntest"
+        session_manager.cache_thumbnail(sid, 1, 200, fake_png)
+
+        cached = session_manager.get_cached_thumbnail(sid, 1, 200)
+        assert cached == fake_png

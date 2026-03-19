@@ -1,5 +1,5 @@
 """
-Mudbrick v2 -- Document and Session Pydantic Models
+Mudbrick v2 -- Document and Session Pydantic Models (Desktop)
 """
 
 from __future__ import annotations
@@ -19,11 +19,12 @@ class OperationRecord(BaseModel):
 
 
 class SessionMetadata(BaseModel):
-    """Metadata for a document editing session, stored in KV."""
+    """Metadata for a document editing session, stored as JSON on local filesystem."""
 
     session_id: str
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    file_path: str = ""  # Original file path on disk (e.g., "C:/docs/contract.pdf")
     file_name: str = ""
     file_size: int = 0
     page_count: int = 0
@@ -42,8 +43,17 @@ class VersionInfo(BaseModel):
     is_current: bool = False
 
 
+# ── Request/Response Models ──
+
+
+class OpenFileRequest(BaseModel):
+    """Request to open a file by local path."""
+
+    file_path: str
+
+
 class SessionCreateResponse(BaseModel):
-    """Response from creating a new session (upload)."""
+    """Response from opening a file."""
 
     session_id: str
     page_count: int
@@ -54,6 +64,7 @@ class SessionInfoResponse(BaseModel):
     """Response from getting session info."""
 
     session_id: str
+    file_path: str
     file_name: str
     file_size: int
     page_count: int
@@ -63,24 +74,22 @@ class SessionInfoResponse(BaseModel):
     updated_at: str
 
 
+class SaveRequest(BaseModel):
+    """Request to save-as to a new path."""
+
+    file_path: str
+
+
+class SaveResponse(BaseModel):
+    """Response from save/save-as."""
+
+    success: bool = True
+    file_path: str
+
+
 class UndoRedoResponse(BaseModel):
     """Response from undo/redo operations."""
 
     version: int
     page_count: int
     operation: str
-
-
-class ChunkUploadResponse(BaseModel):
-    """Response from uploading a chunk."""
-
-    chunk_index: int
-    received: bool = True
-
-
-class ChunkCompleteRequest(BaseModel):
-    """Request to assemble uploaded chunks."""
-
-    session_id: str
-    chunk_count: int
-    file_name: str = "document.pdf"

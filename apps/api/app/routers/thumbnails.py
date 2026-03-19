@@ -1,7 +1,7 @@
 """
-Mudbrick v2 -- Thumbnail Router
+Mudbrick v2 -- Thumbnail Router (Desktop / Local Filesystem)
 
-Generate page thumbnails via PyMuPDF.
+Generate page thumbnails via PyMuPDF, cache on local disk.
 """
 
 from __future__ import annotations
@@ -25,20 +25,23 @@ async def get_page_thumbnail(
 ):
     """Render a page thumbnail at the specified width.
 
-    Page numbers are 1-indexed.
+    Page numbers are 1-indexed. Thumbnails are cached on local disk.
     """
-    # Check if cached thumbnail exists
-    cache_key = f"sessions/{sid}/thumbnails/page_{page}_w{width}.png"
-    cached = await sm.blob.get(cache_key)
+    meta = sm.get_session(sid)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Check local disk cache
+    cached = sm.get_cached_thumbnail(sid, page, width)
     if cached:
         return Response(content=cached, media_type="image/png")
 
-    # Generate thumbnail
-    pdf_bytes = await sm.get_current_pdf(sid)
-    if pdf_bytes is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+    # Generate thumbnail from PDF
+    pdf_path = sm.get_current_pdf_path(sid)
+    if pdf_path is None:
+        raise HTTPException(status_code=404, detail="PDF file not found")
 
-    doc = PdfEngine.open_from_bytes(pdf_bytes)
+    doc = PdfEngine.open_from_file(str(pdf_path))
     try:
         if page < 1 or page > doc.page_count:
             raise HTTPException(
@@ -49,7 +52,7 @@ async def get_page_thumbnail(
     finally:
         doc.close()
 
-    # Cache the thumbnail
-    await sm.blob.put(cache_key, png_bytes, "image/png")
+    # Cache to local disk
+    sm.cache_thumbnail(sid, page, width, png_bytes)
 
     return Response(content=png_bytes, media_type="image/png")

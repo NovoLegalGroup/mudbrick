@@ -1,10 +1,11 @@
 /**
- * Mudbrick v2 -- Typed API Client
+ * Mudbrick v2 -- Typed API Client (Desktop / Local Sidecar)
  *
- * Handles all API communication including chunked uploads.
+ * All operations use local file paths -- no HTTP upload.
+ * Backend runs on localhost:8000 as a Tauri sidecar.
  */
 
-import { API_BASE, CHUNK_SIZE_BYTES, CHUNKED_UPLOAD_THRESHOLD_BYTES } from '@mudbrick/shared/src/constants';
+import { API_BASE } from '@mudbrick/shared/src/constants';
 import type {
   SessionCreateResponse,
   SessionInfoResponse,
@@ -13,6 +14,7 @@ import type {
   ExportResponse,
   PageOperationResponse,
   MergeResponse,
+  SaveResponse,
 } from '../types/api';
 import type { PageAnnotations } from '../types/annotation';
 
@@ -23,7 +25,7 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
-  // ── Helpers ──
+  // -- Helpers --
 
   private async request<T>(
     path: string,
@@ -55,111 +57,50 @@ class ApiClient {
     return response.blob();
   }
 
-  // ── Health ──
+  // -- Health --
 
   async health(): Promise<HealthResponse> {
     return this.request('/health');
   }
 
-  // ── Document Upload ──
+  // -- Document Operations (file-path based, no upload) --
 
-  async uploadDocument(
-    file: File,
-    onProgress?: (progress: number) => void,
-  ): Promise<SessionCreateResponse> {
-    if (file.size > CHUNKED_UPLOAD_THRESHOLD_BYTES) {
-      return this.uploadChunked(file, onProgress);
-    }
-    return this.uploadSingle(file, onProgress);
-  }
-
-  private async uploadSingle(
-    file: File,
-    onProgress?: (progress: number) => void,
-  ): Promise<SessionCreateResponse> {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    // Use XMLHttpRequest for progress tracking
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${this.baseUrl}/documents/upload`);
-
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable && onProgress) {
-          onProgress(Math.round((e.loaded / e.total) * 100));
-        }
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(JSON.parse(xhr.responseText));
-        } else {
-          try {
-            const err = JSON.parse(xhr.responseText);
-            reject(new ApiError(xhr.status, err.detail));
-          } catch {
-            reject(new ApiError(xhr.status, xhr.statusText));
-          }
-        }
-      };
-
-      xhr.onerror = () => reject(new ApiError(0, 'Network error'));
-      xhr.send(formData);
-    });
-  }
-
-  private async uploadChunked(
-    file: File,
-    onProgress?: (progress: number) => void,
-  ): Promise<SessionCreateResponse> {
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE_BYTES);
-    const sessionId = crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * CHUNK_SIZE_BYTES;
-      const end = Math.min(start + CHUNK_SIZE_BYTES, file.size);
-      const chunk = file.slice(start, end);
-
-      const formData = new FormData();
-      formData.append('chunk', chunk, `chunk_${i}`);
-      formData.append('session_id', sessionId);
-      formData.append('chunk_index', String(i));
-
-      await this.request('/documents/upload/chunk', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (onProgress) {
-        onProgress(Math.round(((i + 1) / totalChunks) * 100));
-      }
-    }
-
-    // Complete the upload
-    return this.request('/documents/upload/complete', {
+  /**
+   * Open a PDF file by local filesystem path.
+   * Backend reads the file directly from disk.
+   */
+  async openFile(filePath: string): Promise<SessionCreateResponse> {
+    return this.request('/documents/open', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: sessionId,
-        chunk_count: totalChunks,
-        file_name: file.name,
-      }),
+      body: JSON.stringify({ file_path: filePath }),
     });
   }
-
-  // ── Document Operations ──
 
   async getDocumentInfo(sessionId: string): Promise<SessionInfoResponse> {
     return this.request(`/documents/${sessionId}`);
   }
 
-  async downloadDocument(sessionId: string): Promise<Blob> {
-    return this.requestBlob(`/documents/${sessionId}/download`);
+  /**
+   * Save the current document back to its original file path (Ctrl+S).
+   */
+  async save(sessionId: string): Promise<SaveResponse> {
+    return this.request(`/documents/${sessionId}/save`, { method: 'POST' });
   }
 
-  async deleteDocument(sessionId: string): Promise<{ deleted: boolean }> {
-    return this.request(`/documents/${sessionId}`, { method: 'DELETE' });
+  /**
+   * Save the current document to a new file path (Ctrl+Shift+S).
+   */
+  async saveAs(sessionId: string, filePath: string): Promise<SaveResponse> {
+    return this.request(`/documents/${sessionId}/save-as`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_path: filePath }),
+    });
+  }
+
+  async closeDocument(sessionId: string): Promise<{ success: boolean }> {
+    return this.request(`/documents/${sessionId}/close`, { method: 'POST' });
   }
 
   async undo(sessionId: string): Promise<UndoRedoResponse> {
@@ -170,7 +111,7 @@ class ApiClient {
     return this.request(`/documents/${sessionId}/redo`, { method: 'POST' });
   }
 
-  // ── Page Operations ──
+  // -- Page Operations --
 
   async rotatePage(
     sessionId: string,
@@ -206,6 +147,18 @@ class ApiClient {
     });
   }
 
+  async insertBlankPage(
+    sessionId: string,
+    after: number,
+    size = 'letter',
+  ): Promise<PageOperationResponse> {
+    return this.request(`/pages/${sessionId}/insert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ after, size }),
+    });
+  }
+
   async getThumbnail(sessionId: string, page: number, width = 200): Promise<string> {
     const blob = await this.requestBlob(
       `/pages/${sessionId}/${page}/thumbnail?width=${width}`,
@@ -213,31 +166,49 @@ class ApiClient {
     return URL.createObjectURL(blob);
   }
 
-  // ── Merge ──
+  // -- Merge (file-path based, no upload) --
 
-  async mergeDocuments(files: File[]): Promise<MergeResponse> {
-    const formData = new FormData();
-    for (const file of files) {
-      formData.append('files', file);
-    }
+  /**
+   * Merge multiple local PDF files by path.
+   */
+  async mergeFiles(filePaths: string[]): Promise<MergeResponse> {
     return this.request('/merge', {
       method: 'POST',
-      body: formData,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_paths: filePaths }),
     });
   }
 
-  // ── Export ──
+  // -- Export --
 
+  /**
+   * Export document with annotations flattened.
+   * outputPath is a local filesystem path chosen via Tauri save dialog.
+   */
   async exportDocument(
     sessionId: string,
     annotations: Record<number, PageAnnotations>,
+    outputPath: string,
     options: Record<string, unknown> = {},
   ): Promise<ExportResponse> {
     return this.request(`/export/${sessionId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ annotations, options }),
+      body: JSON.stringify({
+        annotations,
+        output_path: outputPath,
+        options,
+      }),
     });
+  }
+
+  // -- SSE Streaming (for OCR, long operations) --
+
+  /**
+   * Create an EventSource for SSE streaming endpoints.
+   */
+  createEventSource(path: string): EventSource {
+    return new EventSource(`${this.baseUrl}${path}`);
   }
 }
 

@@ -1,8 +1,8 @@
 """
-Mudbrick v2 -- Page Operations Router
+Mudbrick v2 -- Page Operations Router (Desktop / Local Filesystem)
 
 Rotate, delete, reorder, insert blank, crop pages.
-Each operation creates a new version via the session manager.
+Each operation works on local files and creates a new version.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ class RotateRequest(BaseModel):
 
 
 class DeleteRequest(BaseModel):
-    pages: list[int]  # 1-indexed page numbers (sorted descending for deletion)
+    pages: list[int]  # 1-indexed page numbers
 
 
 class ReorderRequest(BaseModel):
@@ -32,7 +32,7 @@ class ReorderRequest(BaseModel):
 
 class InsertRequest(BaseModel):
     after: int = 0  # Insert after this page (1-indexed, 0 = at start)
-    size: str = "letter"  # "letter" or "a4"
+    size: str = "letter"  # "letter" or "a4" or "legal"
 
 
 class CropRequest(BaseModel):
@@ -52,6 +52,14 @@ PAGE_SIZES = {
 }
 
 
+def _load_session_pdf(sm: SessionManager, sid: str) -> tuple[bytes, None]:
+    """Load the current PDF bytes for a session, raising 404 if not found."""
+    pdf_bytes = sm.get_current_pdf_bytes(sid)
+    if pdf_bytes is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return pdf_bytes, None
+
+
 @router.post("/{sid}/rotate", response_model=PageOperationResponse)
 async def rotate_pages(
     sid: str,
@@ -59,24 +67,22 @@ async def rotate_pages(
     sm: SessionManager = Depends(get_session_manager),
 ):
     """Rotate specified pages by the given degrees."""
-    pdf_bytes = await sm.get_current_pdf(sid)
+    pdf_bytes = sm.get_current_pdf_bytes(sid)
     if pdf_bytes is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
     doc = PdfEngine.open_from_bytes(pdf_bytes)
     try:
         for page_num in request.pages:
-            idx = page_num - 1  # Convert to 0-indexed
-            PdfEngine.rotate_page(doc, idx, request.degrees)
-
+            PdfEngine.rotate_page(doc, page_num - 1, request.degrees)
         new_bytes = PdfEngine.save_to_bytes(doc)
+        page_count = doc.page_count
     finally:
         doc.close()
 
-    await sm.save_pdf(sid, new_bytes, f"rotate {request.degrees}deg")
-    meta = await sm.update_metadata(sid, page_count=PdfEngine.open_from_bytes(new_bytes).page_count)
+    sm.save_current_pdf(sid, new_bytes, f"rotate {request.degrees}deg")
 
-    return PageOperationResponse(page_count=meta.page_count)
+    return PageOperationResponse(page_count=page_count)
 
 
 @router.post("/{sid}/delete", response_model=PageOperationResponse)
@@ -86,7 +92,7 @@ async def delete_pages(
     sm: SessionManager = Depends(get_session_manager),
 ):
     """Delete specified pages from the document."""
-    pdf_bytes = await sm.get_current_pdf(sid)
+    pdf_bytes = sm.get_current_pdf_bytes(sid)
     if pdf_bytes is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -104,8 +110,8 @@ async def delete_pages(
     finally:
         doc.close()
 
-    await sm.save_pdf(sid, new_bytes, f"delete pages")
-    await sm.update_metadata(sid, page_count=page_count)
+    sm.save_current_pdf(sid, new_bytes, "delete pages")
+    sm.update_metadata(sid, page_count=page_count)
 
     return PageOperationResponse(page_count=page_count)
 
@@ -117,13 +123,12 @@ async def reorder_pages(
     sm: SessionManager = Depends(get_session_manager),
 ):
     """Reorder pages according to the given order."""
-    pdf_bytes = await sm.get_current_pdf(sid)
+    pdf_bytes = sm.get_current_pdf_bytes(sid)
     if pdf_bytes is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
     doc = PdfEngine.open_from_bytes(pdf_bytes)
     try:
-        # Convert 1-indexed to 0-indexed
         zero_indexed = [p - 1 for p in request.order]
         PdfEngine.reorder_pages(doc, zero_indexed)
         new_bytes = PdfEngine.save_to_bytes(doc)
@@ -131,7 +136,7 @@ async def reorder_pages(
     finally:
         doc.close()
 
-    await sm.save_pdf(sid, new_bytes, "reorder pages")
+    sm.save_current_pdf(sid, new_bytes, "reorder pages")
 
     return PageOperationResponse(page_count=page_count)
 
@@ -143,7 +148,7 @@ async def insert_blank_page(
     sm: SessionManager = Depends(get_session_manager),
 ):
     """Insert a blank page after the specified page."""
-    pdf_bytes = await sm.get_current_pdf(sid)
+    pdf_bytes = sm.get_current_pdf_bytes(sid)
     if pdf_bytes is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -158,8 +163,8 @@ async def insert_blank_page(
     finally:
         doc.close()
 
-    await sm.save_pdf(sid, new_bytes, "insert blank page")
-    await sm.update_metadata(sid, page_count=page_count)
+    sm.save_current_pdf(sid, new_bytes, "insert blank page")
+    sm.update_metadata(sid, page_count=page_count)
 
     return PageOperationResponse(page_count=page_count)
 
@@ -171,7 +176,7 @@ async def crop_pages(
     sm: SessionManager = Depends(get_session_manager),
 ):
     """Crop specified pages to the given bounding box."""
-    pdf_bytes = await sm.get_current_pdf(sid)
+    pdf_bytes = sm.get_current_pdf_bytes(sid)
     if pdf_bytes is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -191,6 +196,6 @@ async def crop_pages(
     finally:
         doc.close()
 
-    await sm.save_pdf(sid, new_bytes, "crop pages")
+    sm.save_current_pdf(sid, new_bytes, "crop pages")
 
     return PageOperationResponse(page_count=page_count)

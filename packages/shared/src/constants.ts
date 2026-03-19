@@ -1,5 +1,5 @@
 /**
- * Mudbrick v2 -- Shared Constants
+ * Mudbrick v2 -- Shared Constants (Desktop)
  * Ported from v1 js/pdf-engine.js
  */
 
@@ -13,25 +13,16 @@ export const MIN_ZOOM = ZOOM_LEVELS[0];
 export const MAX_ZOOM = ZOOM_LEVELS[ZOOM_LEVELS.length - 1];
 export const DEFAULT_ZOOM = 1.0;
 
-/** Upload limits */
-export const MAX_FILE_SIZE_MB = 500;
-export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
-export const CHUNK_SIZE_MB = 5;
-export const CHUNK_SIZE_BYTES = CHUNK_SIZE_MB * 1024 * 1024;
-export const CHUNKED_UPLOAD_THRESHOLD_MB = 10;
-export const CHUNKED_UPLOAD_THRESHOLD_BYTES =
-  CHUNKED_UPLOAD_THRESHOLD_MB * 1024 * 1024;
-
 /** Session settings */
-export const MAX_VERSIONS = 20;
-export const SESSION_TTL_HOURS = 24;
+export const MAX_VERSIONS = 50;
 export const AUTO_SAVE_INTERVAL_MS = 60_000;
 
 /** Thumbnail defaults */
 export const THUMBNAIL_WIDTH = 200;
 
-/** API endpoints */
+/** API base URL -- localhost sidecar */
 export const API_BASE = '/api';
+export const API_DIRECT_BASE = 'http://localhost:8000/api';
 
 /** Annotation tool identifiers */
 export const TOOLS = {

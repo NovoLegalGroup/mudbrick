@@ -1,5 +1,5 @@
 /**
- * Mudbrick v2 -- PDF-related TypeScript types
+ * Mudbrick v2 -- PDF-related TypeScript types (Desktop)
  */
 
 export interface PageInfo {
@@ -11,6 +11,7 @@ export interface PageInfo {
 
 export interface DocumentInfo {
   sessionId: string;
+  filePath: string; // Local filesystem path (e.g., "C:/docs/contract.pdf")
   fileName: string;
   fileSize: number;
   pageCount: number;

@@ -1,14 +1,15 @@
 /**
- * Mudbrick v2 -- Session Store (Zustand)
+ * Mudbrick v2 -- Session Store (Zustand) -- Desktop
  *
- * Manages recent files and user preferences persisted in localStorage.
+ * Manages recent files and user preferences.
+ * Recent files are tracked by local file path (not session ID).
  */
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export interface RecentFile {
-  sessionId: string;
+  filePath: string; // Local filesystem path
   fileName: string;
   fileSize: number;
   pageCount: number;
@@ -28,7 +29,7 @@ interface SessionState {
 
   /** Actions */
   addRecentFile: (file: RecentFile) => void;
-  removeRecentFile: (sessionId: string) => void;
+  removeRecentFile: (filePath: string) => void;
   clearRecentFiles: () => void;
   updatePreference: <K extends keyof SessionState['preferences']>(
     key: K,
@@ -51,17 +52,17 @@ export const useSessionStore = create<SessionState>()(
       addRecentFile: (file) =>
         set((state) => {
           const filtered = state.recentFiles.filter(
-            (f) => f.sessionId !== file.sessionId,
+            (f) => f.filePath !== file.filePath,
           );
           return {
             recentFiles: [file, ...filtered].slice(0, MAX_RECENT_FILES),
           };
         }),
 
-      removeRecentFile: (sessionId) =>
+      removeRecentFile: (filePath) =>
         set((state) => ({
           recentFiles: state.recentFiles.filter(
-            (f) => f.sessionId !== sessionId,
+            (f) => f.filePath !== filePath,
           ),
         })),
 

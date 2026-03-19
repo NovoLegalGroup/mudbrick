@@ -1,7 +1,8 @@
 /**
- * Mudbrick v2 -- Document Store (Zustand)
+ * Mudbrick v2 -- Document Store (Zustand) -- Desktop
  *
  * Manages PDF document state: session, pages, loading status.
+ * No upload progress -- files are opened by local path.
  */
 
 import { create } from 'zustand';
@@ -14,9 +15,6 @@ interface DocumentState {
   /** Whether a document is currently loading */
   loading: boolean;
 
-  /** Upload progress (0-100) */
-  uploadProgress: number;
-
   /** Current page number (1-indexed for display) */
   currentPage: number;
 
@@ -26,7 +24,6 @@ interface DocumentState {
   /** Actions */
   setDocument: (doc: DocumentInfo | null) => void;
   setLoading: (loading: boolean) => void;
-  setUploadProgress: (progress: number) => void;
   setCurrentPage: (page: number) => void;
   setPageCount: (count: number) => void;
   setError: (error: string | null) => void;
@@ -36,7 +33,6 @@ interface DocumentState {
 const initialState = {
   document: null,
   loading: false,
-  uploadProgress: 0,
   currentPage: 1,
   error: null,
 };
@@ -46,7 +42,6 @@ export const useDocumentStore = create<DocumentState>((set) => ({
 
   setDocument: (doc) => set({ document: doc, error: null }),
   setLoading: (loading) => set({ loading }),
-  setUploadProgress: (progress) => set({ uploadProgress: progress }),
   setCurrentPage: (page) => set({ currentPage: page }),
   setPageCount: (count) =>
     set((state) => ({

@@ -17,7 +17,10 @@
     "zustand": "^5.0.0",
     "pdfjs-dist": "^4.8.69",
     "fabric": "^6.0.0",
-    "pdf-lib": "^1.17.1",
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.0.0",
+    "@tauri-apps/plugin-fs": "^2.0.0",
+    "@tauri-apps/plugin-shell": "^2.0.0",
     "@mudbrick/shared": "workspace:*"
   },
   "devDependencies": {

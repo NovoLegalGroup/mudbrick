@@ -1,38 +1,28 @@
 """
-Mudbrick v2 -- File Handling Utilities
+Mudbrick v2 -- File Handling Utilities (Desktop)
 
-Temp file management, PDF validation, and helper functions.
+Local filesystem operations, PDF validation, formatting helpers.
 """
 
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 from typing import Optional
-
-
-def get_temp_dir(session_id: Optional[str] = None) -> Path:
-    """Get a temporary directory for processing, optionally scoped to a session."""
-    base = Path(tempfile.gettempdir()) / "mudbrick"
-    if session_id:
-        base = base / session_id
-    base.mkdir(parents=True, exist_ok=True)
-    return base
-
-
-def cleanup_temp_dir(session_id: str) -> None:
-    """Remove temporary files for a session."""
-    import shutil
-
-    temp_dir = get_temp_dir(session_id)
-    if temp_dir.exists():
-        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def is_valid_pdf(data: bytes) -> bool:
     """Quick check if bytes look like a valid PDF (magic bytes check)."""
     return data[:5] == b"%PDF-"
+
+
+def is_valid_pdf_file(path: str) -> bool:
+    """Check if a file path points to a valid PDF."""
+    p = Path(path)
+    if not p.exists() or not p.is_file():
+        return False
+    with open(p, "rb") as f:
+        header = f.read(5)
+    return header == b"%PDF-"
 
 
 def format_file_size(size_bytes: int) -> str:
@@ -45,3 +35,9 @@ def format_file_size(size_bytes: int) -> str:
         return f"{size_bytes / (1024 * 1024):.1f} MB"
     else:
         return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
+
+
+def ensure_dir(path: Path) -> Path:
+    """Ensure a directory exists, creating it if necessary."""
+    path.mkdir(parents=True, exist_ok=True)
+    return path

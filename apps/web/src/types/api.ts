@@ -1,5 +1,5 @@
 /**
- * Mudbrick v2 -- API TypeScript types
+ * Mudbrick v2 -- API TypeScript types (Desktop)
  *
  * Request and response types for all API endpoints.
  */
@@ -7,7 +7,6 @@
 export interface HealthResponse {
   status: string;
   version: string;
-  environment: string;
 }
 
 export interface SessionCreateResponse {
@@ -18,6 +17,7 @@ export interface SessionCreateResponse {
 
 export interface SessionInfoResponse {
   session_id: string;
+  file_path: string;
   file_name: string;
   file_size: number;
   page_count: number;
@@ -40,11 +40,6 @@ export interface UndoRedoResponse {
   operation: string;
 }
 
-export interface ChunkUploadResponse {
-  chunk_index: number;
-  received: boolean;
-}
-
 export interface PageOperationResponse {
   success: boolean;
   page_count: number;
@@ -55,11 +50,17 @@ export interface MergeResponse {
   page_count: number;
 }
 
-export interface ExportResponse {
-  download_url: string;
+export interface SaveResponse {
+  success: boolean;
+  file_path: string;
 }
 
-export interface ApiError {
+export interface ExportResponse {
+  success: boolean;
+  file_path: string;
+}
+
+export interface ApiErrorResponse {
   detail: string;
 }
 
