@@ -9,7 +9,7 @@ on:
 jobs:
   frontend:
     name: Frontend (lint + type-check + test)
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -30,12 +30,20 @@ jobs:
       - name: Lint
         run: pnpm --filter @mudbrick/web lint
 
-      - name: Test
-        run: pnpm --filter @mudbrick/web test
+      - name: Test with coverage
+        run: pnpm --filter @mudbrick/web test -- --coverage --reporter=verbose
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-test-results
+          path: apps/web/coverage/
+          retention-days: 14
 
   backend:
     name: Backend (type-check + test)
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     defaults:
       run:
         working-directory: apps/api
@@ -50,13 +58,21 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio httpx
+          pip install pytest pytest-asyncio httpx pytest-cov
 
       - name: Type check
         run: python -m mypy . --ignore-missing-imports || true
 
-      - name: Test
-        run: python -m pytest tests/ -v || true
+      - name: Test with coverage
+        run: python -m pytest tests/ -v --tb=short --cov=app --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: apps/api/coverage.xml
+          retention-days: 14
 
   tauri-check:
     name: Tauri cargo check

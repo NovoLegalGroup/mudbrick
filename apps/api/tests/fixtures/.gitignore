@@ -1,0 +1,4 @@
+# Generated test PDF fixtures (recreate with generate_fixtures.py)
+*.pdf
+# Keep the generator scripts
+!.gitignore
