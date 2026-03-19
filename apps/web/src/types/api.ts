@@ -60,6 +60,21 @@ export interface ExportResponse {
   file_path: string;
 }
 
+export interface ImageExportRequest {
+  output_dir: string;
+  format?: 'png' | 'jpg' | 'jpeg';
+  dpi?: number;
+  pages?: number[];
+}
+
+export interface ImageExportResponse {
+  success: boolean;
+  output_dir: string;
+  format: string;
+  exported_count: number;
+  file_paths: string[];
+}
+
 export interface BatesRequest {
   prefix?: string;
   suffix?: string;

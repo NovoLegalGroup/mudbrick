@@ -39,6 +39,28 @@ class ExportResponse(BaseModel):
     file_path: str
 
 
+class ExportImagesRequest(BaseModel):
+    """Request body for exporting PDF pages to image files."""
+
+    output_dir: str
+    format: str = Field(default="png", pattern="^(png|jpg|jpeg)$")
+    dpi: int = Field(default=150, ge=72, le=600)
+    pages: list[int] | None = Field(
+        default=None,
+        description="Specific 1-indexed pages to export. None = all pages.",
+    )
+
+
+class ExportImagesResponse(BaseModel):
+    """Response from the image export endpoint."""
+
+    success: bool = True
+    output_dir: str
+    format: str
+    exported_count: int
+    file_paths: list[str]
+
+
 @router.post("/{sid}", response_model=ExportResponse)
 async def export_document(
     sid: str,
@@ -93,3 +115,58 @@ async def export_document(
         file_path = meta.file_path if meta else ""
 
     return ExportResponse(file_path=file_path)
+
+
+@router.post("/{sid}/images", response_model=ExportImagesResponse)
+async def export_document_images(
+    sid: str,
+    request: ExportImagesRequest,
+    sm: SessionManager = Depends(get_session_manager),
+):
+    """Export PDF pages to individual image files in a local directory."""
+    pdf_path = sm.get_current_pdf_path(sid)
+    if pdf_path is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    output_dir = Path(request.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    meta = sm.get_session(sid)
+    base_name = Path(meta.file_name).stem if meta else f"document_{sid}"
+    format_name = "jpg" if request.format.lower() in {"jpg", "jpeg"} else "png"
+
+    doc = PdfEngine.open_from_file(str(pdf_path))
+    try:
+        if request.pages:
+            page_numbers = [
+                page_num
+                for page_num in request.pages
+                if 1 <= page_num <= doc.page_count
+            ]
+        else:
+            page_numbers = list(range(1, doc.page_count + 1))
+
+        if not page_numbers:
+            raise HTTPException(status_code=400, detail="No valid pages to export")
+
+        file_paths: list[str] = []
+        for page_num in page_numbers:
+            image_bytes = PdfEngine.render_page_to_image(
+                doc,
+                page_num - 1,
+                dpi=request.dpi,
+                alpha=False,
+                image_format=format_name,
+            )
+            output_path = output_dir / f"{base_name}_page_{page_num:03d}.{format_name}"
+            output_path.write_bytes(image_bytes)
+            file_paths.append(str(output_path))
+    finally:
+        doc.close()
+
+    return ExportImagesResponse(
+        output_dir=str(output_dir),
+        format=format_name,
+        exported_count=len(file_paths),
+        file_paths=file_paths,
+    )

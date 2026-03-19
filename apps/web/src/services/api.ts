@@ -12,6 +12,8 @@ import type {
   UndoRedoResponse,
   HealthResponse,
   ExportResponse,
+  ImageExportRequest,
+  ImageExportResponse,
   PageOperationResponse,
   MergeResponse,
   SaveResponse,
@@ -225,6 +227,20 @@ class ApiClient {
         output_path: outputPath,
         options,
       }),
+    });
+  }
+
+  /**
+   * Export document pages as individual image files.
+   */
+  async exportDocumentImages(
+    sessionId: string,
+    request: ImageExportRequest,
+  ): Promise<ImageExportResponse> {
+    return this.request(`/export/${sessionId}/images`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
     });
   }
 
