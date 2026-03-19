@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .routers import documents
+from .routers import documents, pages, merge, thumbnails, export
 
 app = FastAPI(
     title="Mudbrick API",
@@ -29,6 +29,10 @@ if settings.environment == "local":
 
 # Register routers
 app.include_router(documents.router)
+app.include_router(pages.router)
+app.include_router(merge.router)
+app.include_router(thumbnails.router)
+app.include_router(export.router)
 
 
 @app.get("/api/health")
