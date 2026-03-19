@@ -92,6 +92,21 @@ class TestDocumentOperations:
         response = await doc_client.get("/api/documents/nonexistent")
         assert response.status_code == 404
 
+    async def test_get_current_pdf_bytes(
+        self, doc_client: AsyncClient, valid_pdf_file: Path
+    ):
+        open_resp = await doc_client.post(
+            "/api/documents/open",
+            json={"file_path": str(valid_pdf_file)},
+        )
+        sid = open_resp.json()["session_id"]
+
+        response = await doc_client.get(f"/api/documents/{sid}/pdf")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/pdf")
+        assert response.headers["cache-control"] == "no-store"
+        assert response.content[:4] == b"%PDF"
+
     async def test_save_document(
         self, doc_client: AsyncClient, valid_pdf_file: Path
     ):

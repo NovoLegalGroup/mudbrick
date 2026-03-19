@@ -26,6 +26,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["msi", "nsis"],
     "icon": [
       "icons/32x32.png",
@@ -43,6 +44,11 @@
     "shell": {
       "sidecar": true,
       "scope": []
+    },
+    "updater": {
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

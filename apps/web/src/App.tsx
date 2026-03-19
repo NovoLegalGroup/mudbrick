@@ -12,6 +12,12 @@ import { PdfViewer } from './components/viewer/PdfViewer';
 import { ThumbnailSidebar } from './components/viewer/ThumbnailSidebar';
 import { Toolbar } from './components/annotations/Toolbar';
 import { PropertyPanel } from './components/annotations/PropertyPanel';
+import { ExportDialog } from './components/export/ExportDialog';
+import { ExportToolsBar } from './components/export/ExportToolsBar';
+import { ImageExportDialog } from './components/export/ImageExportDialog';
+import { BatesDialog } from './components/legal/BatesDialog';
+import { HeaderFooterDialog } from './components/legal/HeaderFooterDialog';
+import { LegalToolsBar } from './components/legal/LegalToolsBar';
 import { ToastContainer } from './components/shared/Toast';
 import { OfflineIndicator } from './components/shared/OfflineIndicator';
 import { useDocumentStore } from './stores/documentStore';
@@ -37,8 +43,30 @@ export function App() {
   const addRecentFile = useSessionStore((s) => s.addRecentFile);
   const addToast = useUIStore((s) => s.addToast);
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
+  const activeModal = useUIStore((s) => s.activeModal);
+  const openModal = useUIStore((s) => s.openModal);
+  const closeModal = useUIStore((s) => s.closeModal);
 
   const { openFile, openMultipleFiles, chooseSavePath } = useTauri();
+
+  const loadDocumentIntoStore = useCallback(
+    async (sessionId: string) => {
+      const infoResp = await api.getDocumentInfo(sessionId);
+      setDocument({
+        sessionId: infoResp.session_id,
+        filePath: infoResp.file_path,
+        fileName: infoResp.file_name,
+        fileSize: infoResp.file_size,
+        pageCount: infoResp.page_count,
+        currentVersion: infoResp.current_version,
+        pages: [],
+        createdAt: infoResp.created_at,
+        updatedAt: infoResp.updated_at,
+      });
+      return infoResp;
+    },
+    [setDocument],
+  );
 
   /**
    * Open a PDF file by local path.
@@ -51,35 +79,18 @@ export function App() {
       try {
         // Open the file via backend
         const createResp = await api.openFile(filePath);
-
-        // Fetch full document info
-        const infoResp = await api.getDocumentInfo(createResp.session_id);
-
-        // Build DocumentInfo from API response
-        const fileName = filePath.split(/[/\\]/).pop() ?? filePath;
-
-        setDocument({
-          sessionId: infoResp.session_id,
-          filePath: infoResp.file_path,
-          fileName: infoResp.file_name,
-          fileSize: infoResp.file_size,
-          pageCount: infoResp.page_count,
-          currentVersion: infoResp.current_version,
-          pages: [], // Pages populated by viewer on render
-          createdAt: infoResp.created_at,
-          updatedAt: infoResp.updated_at,
-        });
+        const infoResp = await loadDocumentIntoStore(createResp.session_id);
 
         // Track in recent files
         addRecentFile({
           filePath: infoResp.file_path,
-          fileName: infoResp.file_name || fileName,
+          fileName: infoResp.file_name,
           fileSize: infoResp.file_size,
           pageCount: infoResp.page_count,
           openedAt: new Date().toISOString(),
         });
 
-        addToast({ type: 'success', message: `Opened ${infoResp.file_name || fileName}` });
+        addToast({ type: 'success', message: `Opened ${infoResp.file_name}` });
       } catch (err) {
         const message =
           err instanceof Error ? err.message : 'Failed to open file';
@@ -89,7 +100,7 @@ export function App() {
         setLoading(false);
       }
     },
-    [setDocument, setLoading, setError, addRecentFile, addToast],
+    [addRecentFile, addToast, loadDocumentIntoStore, setError, setLoading],
   );
 
   /**
@@ -136,6 +147,7 @@ export function App() {
     try {
       setLoading(true);
       await api.saveAs(document.sessionId, path);
+      await loadDocumentIntoStore(document.sessionId);
       addToast({ type: 'success', message: `Saved as ${path.split(/[/\\]/).pop()}` });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Save failed';
@@ -143,7 +155,7 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }, [document, chooseSavePath, setLoading, addToast]);
+  }, [addToast, chooseSavePath, document, loadDocumentIntoStore, setLoading]);
 
   /** Merge files */
   const handleMerge = useCallback(async () => {
@@ -155,18 +167,7 @@ export function App() {
     try {
       setLoading(true);
       const resp = await api.mergeFiles(paths);
-      const infoResp = await api.getDocumentInfo(resp.session_id);
-      setDocument({
-        sessionId: infoResp.session_id,
-        filePath: infoResp.file_path,
-        fileName: infoResp.file_name,
-        fileSize: infoResp.file_size,
-        pageCount: infoResp.page_count,
-        currentVersion: infoResp.current_version,
-        pages: [],
-        createdAt: infoResp.created_at,
-        updatedAt: infoResp.updated_at,
-      });
+      await loadDocumentIntoStore(resp.session_id);
       addToast({ type: 'success', message: `Merged ${paths.length} files` });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Merge failed';
@@ -174,7 +175,7 @@ export function App() {
     } finally {
       setLoading(false);
     }
-  }, [openMultipleFiles, setLoading, setDocument, addToast]);
+  }, [addToast, loadDocumentIntoStore, openMultipleFiles, setLoading]);
 
   /** Page operations from sidebar context menu */
   const handlePageOperation = useCallback(
@@ -197,14 +198,7 @@ export function App() {
             await api.insertBlankPage(sid, op.pageNum);
             break;
         }
-        // Refresh doc info
-        const info = await api.getDocumentInfo(sid);
-        setDocument({
-          ...document,
-          pageCount: info.page_count,
-          currentVersion: info.current_version,
-          updatedAt: info.updated_at,
-        });
+        await loadDocumentIntoStore(sid);
         addToast({ type: 'success', message: `Page ${op.type.replace('-', ' ')} done` });
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Operation failed';
@@ -213,7 +207,7 @@ export function App() {
         setLoading(false);
       }
     },
-    [document, setLoading, setDocument, addToast],
+    [addToast, document, loadDocumentIntoStore, setLoading],
   );
 
   /** Reorder pages from sidebar drag */
@@ -223,13 +217,7 @@ export function App() {
       try {
         setLoading(true);
         await api.reorderPages(document.sessionId, newOrder);
-        const info = await api.getDocumentInfo(document.sessionId);
-        setDocument({
-          ...document,
-          pageCount: info.page_count,
-          currentVersion: info.current_version,
-          updatedAt: info.updated_at,
-        });
+        await loadDocumentIntoStore(document.sessionId);
         addToast({ type: 'success', message: 'Pages reordered' });
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Reorder failed';
@@ -238,8 +226,15 @@ export function App() {
         setLoading(false);
       }
     },
-    [document, setLoading, setDocument, addToast],
+    [addToast, document, loadDocumentIntoStore, setLoading],
   );
+
+  const handleLegalToolApplied = useCallback(async () => {
+    if (!document) {
+      return;
+    }
+    await loadDocumentIntoStore(document.sessionId);
+  }, [document, loadDocumentIntoStore]);
 
   useKeyboardShortcuts({
     'Ctrl+O': handleKeyboardOpen,
@@ -287,6 +282,14 @@ export function App() {
         <div style={{ marginLeft: '16px' }}>
           <Toolbar />
         </div>
+        <LegalToolsBar
+          onOpenBates={() => openModal('bates')}
+          onOpenHeaders={() => openModal('headers')}
+        />
+        <ExportToolsBar
+          onOpenPdfExport={() => openModal('export')}
+          onOpenImageExport={() => openModal('export-images')}
+        />
         {error && (
           <span
             style={{
@@ -311,10 +314,28 @@ export function App() {
           </aside>
         )}
         <main className="app-main" style={{ flexDirection: 'column', justifyContent: 'stretch' }}>
-          <PdfViewer sessionId={document.sessionId} />
+          <PdfViewer sessionId={document.sessionId} version={document.currentVersion} />
         </main>
         <PropertyPanel />
       </div>
+      <BatesDialog
+        open={activeModal === 'bates'}
+        onClose={closeModal}
+        onApplied={handleLegalToolApplied}
+      />
+      <HeaderFooterDialog
+        open={activeModal === 'headers'}
+        onClose={closeModal}
+        onApplied={handleLegalToolApplied}
+      />
+      <ExportDialog
+        open={activeModal === 'export'}
+        onClose={closeModal}
+      />
+      <ImageExportDialog
+        open={activeModal === 'export-images'}
+        onClose={closeModal}
+      />
       <LoadingOverlay visible={loading} message="Processing..." />
       <ToastContainer />
       <OfflineIndicator />

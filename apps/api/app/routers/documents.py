@@ -7,7 +7,7 @@ No HTTP upload -- backend reads files directly from disk.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..dependencies import get_session_manager
 from ..models.document import (
@@ -81,6 +81,23 @@ async def get_document_info(
         versions=versions,
         created_at=meta.created_at,
         updated_at=meta.updated_at,
+    )
+
+
+@router.get("/{sid}/pdf")
+async def get_current_pdf(
+    sid: str,
+    sm: SessionManager = Depends(get_session_manager),
+):
+    """Return the current working PDF bytes for viewer reload/rendering."""
+    pdf_bytes = sm.get_current_pdf_bytes(sid)
+    if pdf_bytes is None:
+        raise HTTPException(status_code=404, detail=f"Session not found: {sid}")
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Cache-Control": "no-store"},
     )
 
 

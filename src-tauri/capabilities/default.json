@@ -15,6 +15,7 @@
     "shell:allow-spawn",
     "shell:allow-execute",
     "http:default",
-    "http:allow-fetch"
+    "http:allow-fetch",
+    "updater:default"
   ]
 }

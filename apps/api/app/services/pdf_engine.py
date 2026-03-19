@@ -94,6 +94,7 @@ class PdfEngine:
         page_num: int,
         dpi: int = 150,
         alpha: bool = False,
+        image_format: str = "png",
     ) -> bytes:
         """Render a page to PNG image bytes.
 
@@ -102,9 +103,10 @@ class PdfEngine:
             page_num: 0-indexed page number.
             dpi: Resolution in dots per inch (default 150).
             alpha: Include alpha channel (default False).
+            image_format: Output format ("png" or "jpg").
 
         Returns:
-            PNG image as bytes.
+            Image bytes in the requested format.
         """
         if page_num < 0 or page_num >= doc.page_count:
             raise IndexError(f"Page {page_num} out of range (0-{doc.page_count - 1})")
@@ -113,7 +115,8 @@ class PdfEngine:
         zoom = dpi / 72.0
         mat = fitz.Matrix(zoom, zoom)
         pix = page.get_pixmap(matrix=mat, alpha=alpha)
-        return pix.tobytes("png")
+        output = "jpg" if image_format.lower() in {"jpg", "jpeg"} else "png"
+        return pix.tobytes(output)
 
     @staticmethod
     def render_thumbnail(

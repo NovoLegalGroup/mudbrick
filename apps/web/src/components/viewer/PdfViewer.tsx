@@ -16,9 +16,10 @@ import { useDocumentStore } from '../../stores/documentStore';
 
 interface PdfViewerProps {
   sessionId: string;
+  version: number;
 }
 
-export function PdfViewer({ sessionId }: PdfViewerProps) {
+export function PdfViewer({ sessionId, version }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const setCurrentPage = useDocumentStore((s) => s.setCurrentPage);
   const currentPage = useDocumentStore((s) => s.currentPage);
@@ -32,8 +33,9 @@ export function PdfViewer({ sessionId }: PdfViewerProps) {
   const { zoom, zoomIn, zoomOut, setZoom, fitWidth, fitPage, resetZoom } =
     useZoom({ containerRef });
 
-  const { pageCount, renderPage, getPageDimensions, reload } = usePdfDocument({
+  const { pageCount, getPageDimensions } = usePdfDocument({
     sessionId,
+    versionKey: version,
     onLoad: (count) => {
       setPageCount(count);
       // Get first page dimensions for fit calculations

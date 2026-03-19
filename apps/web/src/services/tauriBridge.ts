@@ -5,6 +5,14 @@
  * Falls back gracefully when not running inside Tauri (e.g., browser dev mode).
  */
 
+export interface AppUpdateStatus {
+  configured: boolean;
+  endpoint: string | null;
+  currentVersion: string;
+  updateAvailable: boolean;
+  latestVersion: string | null;
+}
+
 /** Check if running inside a Tauri WebView */
 export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI__' in window;
@@ -65,6 +73,22 @@ export async function saveFileDialog(defaultName = 'document.pdf'): Promise<stri
 }
 
 /**
+ * Open a directory chooser dialog.
+ * Returns the selected folder path, or null if cancelled.
+ */
+export async function openDirectoryDialog(): Promise<string | null> {
+  if (!isTauri()) return null;
+
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const result = await open({
+    directory: true,
+    multiple: false,
+  });
+
+  return typeof result === 'string' ? result : null;
+}
+
+/**
  * Get the app data directory path (%APPDATA%/mudbrick).
  */
 export async function getAppDataDir(): Promise<string | null> {
@@ -72,6 +96,34 @@ export async function getAppDataDir(): Promise<string | null> {
 
   const { appDataDir } = await import('@tauri-apps/api/path');
   return appDataDir();
+}
+
+/**
+ * Ask the native shell whether an update is available.
+ */
+export async function checkForAppUpdate(): Promise<AppUpdateStatus> {
+  if (!isTauri()) {
+    return {
+      configured: false,
+      endpoint: null,
+      currentVersion: 'dev',
+      updateAvailable: false,
+      latestVersion: null,
+    };
+  }
+
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<AppUpdateStatus>('check_for_app_update');
+}
+
+/**
+ * Install a pending native update.
+ */
+export async function installAppUpdate(): Promise<boolean> {
+  if (!isTauri()) return false;
+
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<boolean>('install_app_update');
 }
 
 // -- Browser fallback for file dialog --

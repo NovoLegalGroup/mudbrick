@@ -6,7 +6,12 @@
  */
 
 import { useCallback } from 'react';
-import { isTauri, openFileDialog, saveFileDialog } from '../services/tauriBridge';
+import {
+  isTauri,
+  openDirectoryDialog,
+  openFileDialog,
+  saveFileDialog,
+} from '../services/tauriBridge';
 
 export function useTauri() {
   const isDesktop = isTauri();
@@ -27,10 +32,15 @@ export function useTauri() {
     [],
   );
 
+  const chooseDirectory = useCallback(async (): Promise<string | null> => {
+    return openDirectoryDialog();
+  }, []);
+
   return {
     isDesktop,
     openFile,
     openMultipleFiles,
     chooseSavePath,
+    chooseDirectory,
   };
 }

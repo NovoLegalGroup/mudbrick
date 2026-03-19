@@ -8,6 +8,7 @@
 
 import { useCallback } from 'react';
 import { DropZone } from './DropZone';
+import { UpdatePanel } from '../shared/UpdatePanel';
 import { useSessionStore, type RecentFile } from '../../stores/sessionStore';
 import { useUIStore } from '../../stores/uiStore';
 import { useTauri } from '../../hooks/useTauri';
@@ -162,6 +163,8 @@ export function WelcomeScreen({ onOpenFile, loading }: WelcomeScreenProps) {
       <p style={{ fontSize: '12px', color: 'var(--mb-text-muted)', opacity: 0.7 }}>
         Press <kbd style={kbdStyle}>Ctrl+O</kbd> to open a file
       </p>
+
+      <UpdatePanel />
 
       {/* Recent Files */}
       {recentFiles.length > 0 && (

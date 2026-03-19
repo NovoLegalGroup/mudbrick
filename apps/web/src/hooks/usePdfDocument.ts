@@ -12,6 +12,8 @@ import { API_BASE } from '@mudbrick/shared/src/constants';
 interface UsePdfDocumentOptions {
   /** Session ID from the backend */
   sessionId: string | null;
+  /** Changes when the current PDF bytes should be reloaded */
+  versionKey?: number | string;
   /** Called when the document is loaded */
   onLoad?: (pageCount: number) => void;
   /** Called on error */
@@ -41,6 +43,7 @@ interface UsePdfDocumentResult {
 
 export function usePdfDocument({
   sessionId,
+  versionKey,
   onLoad,
   onError,
 }: UsePdfDocumentOptions): UsePdfDocumentResult {
@@ -48,20 +51,26 @@ export function usePdfDocument({
   const [pageCount, setPageCount] = useState(0);
   const isMountedRef = useRef(true);
   const currentSessionRef = useRef<string | null>(null);
+  const currentVersionRef = useRef<number | string | undefined>(undefined);
 
   const loadDocument = useCallback(
-    async (sid: string) => {
+    async (sid: string, currentVersion?: number | string) => {
       setLoading(true);
       try {
         // Load PDF from the backend render endpoint
         // The backend serves the PDF bytes at /api/documents/{sid}/pdf
-        const pdfUrl = `${API_BASE}/documents/${sid}/pdf`;
+        const versionParam =
+          currentVersion === undefined
+            ? 'current'
+            : encodeURIComponent(String(currentVersion));
+        const pdfUrl = `${API_BASE}/documents/${sid}/pdf?v=${versionParam}`;
         const doc = await pdfService.load(pdfUrl);
 
         if (isMountedRef.current) {
           const count = doc.numPages;
           setPageCount(count);
           currentSessionRef.current = sid;
+          currentVersionRef.current = currentVersion;
           onLoad?.(count);
         }
       } catch (err) {
@@ -80,10 +89,13 @@ export function usePdfDocument({
 
   // Load when sessionId changes
   useEffect(() => {
-    if (sessionId && sessionId !== currentSessionRef.current) {
-      loadDocument(sessionId);
+    if (
+      sessionId &&
+      (sessionId !== currentSessionRef.current || versionKey !== currentVersionRef.current)
+    ) {
+      loadDocument(sessionId, versionKey);
     }
-  }, [sessionId, loadDocument]);
+  }, [loadDocument, sessionId, versionKey]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -128,7 +140,7 @@ export function usePdfDocument({
 
   const reload = useCallback(async () => {
     if (currentSessionRef.current) {
-      await loadDocument(currentSessionRef.current);
+      await loadDocument(currentSessionRef.current, currentVersionRef.current);
     }
   }, [loadDocument]);
 
@@ -137,6 +149,7 @@ export function usePdfDocument({
     if (isMountedRef.current) {
       setPageCount(0);
       currentSessionRef.current = null;
+      currentVersionRef.current = undefined;
     }
   }, []);
 
