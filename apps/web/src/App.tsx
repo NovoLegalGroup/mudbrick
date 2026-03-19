@@ -9,6 +9,8 @@ import { useCallback } from 'react';
 import { WelcomeScreen } from './components/welcome/WelcomeScreen';
 import { LoadingOverlay } from './components/welcome/LoadingOverlay';
 import { PdfViewer } from './components/viewer/PdfViewer';
+import { ThumbnailSidebar } from './components/viewer/ThumbnailSidebar';
+import { Toolbar } from './components/annotations/Toolbar';
 import { ToastContainer } from './components/shared/Toast';
 import { OfflineIndicator } from './components/shared/OfflineIndicator';
 import { useDocumentStore } from './stores/documentStore';
@@ -98,6 +100,17 @@ export function App() {
     }
   }, [openFile, handleOpenFile]);
 
+  const setCurrentPage = useDocumentStore((s) => s.setCurrentPage);
+
+  /** Navigate to a specific page (from sidebar click) */
+  const handleNavigateToPage = useCallback(
+    (pageNum: number) => {
+      setCurrentPage(pageNum);
+      // PdfViewer will pick up the currentPage change and scroll
+    },
+    [setCurrentPage],
+  );
+
   useKeyboardShortcuts({
     'Ctrl+O': handleKeyboardOpen,
   });
@@ -139,6 +152,9 @@ export function App() {
         >
           {document.fileName}
         </span>
+        <div style={{ marginLeft: '16px' }}>
+          <Toolbar />
+        </div>
         {error && (
           <span
             style={{
@@ -153,11 +169,11 @@ export function App() {
       </header>
       <div className="app-body">
         {sidebarOpen && (
-          <aside className="app-sidebar">
-            <p style={{ fontSize: '12px', color: 'var(--mb-text-secondary)' }}>
-              {document.pageCount} pages
-            </p>
-            {/* ThumbnailSidebar will be mounted here by C5 */}
+          <aside className="app-sidebar" style={{ padding: 0 }}>
+            <ThumbnailSidebar
+              sessionId={document.sessionId}
+              onNavigate={handleNavigateToPage}
+            />
           </aside>
         )}
         <main className="app-main" style={{ flexDirection: 'column', justifyContent: 'stretch' }}>
