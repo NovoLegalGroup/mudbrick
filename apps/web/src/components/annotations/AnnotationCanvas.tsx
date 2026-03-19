@@ -15,6 +15,10 @@ import { useEffect, useRef, useCallback } from 'react';
 import { Canvas as FabricCanvas } from 'fabric';
 import { DrawTool } from './tools/DrawTool';
 import { HighlightTool } from './tools/HighlightTool';
+import { TextTool } from './tools/TextTool';
+import { ShapeTool } from './tools/ShapeTool';
+import { StampTool } from './tools/StampTool';
+import { RedactTool } from './tools/RedactTool';
 import { useAnnotationStore } from '../../stores/annotationStore';
 import { useAnnotations } from '../../hooks/useAnnotations';
 import { TOOLS } from '@mudbrick/shared/src/constants';
@@ -145,8 +149,26 @@ export function AnnotationCanvas({
         active={activeTool === TOOLS.HIGHLIGHT}
         onAnnotationAdded={handleAnnotationAdded}
       />
-
-      {/* TextTool, ShapeTool, StampTool, RedactTool will be added by D2 */}
+      <TextTool
+        canvas={fabricRef.current}
+        active={activeTool === TOOLS.TEXT}
+        onAnnotationAdded={handleAnnotationAdded}
+      />
+      <ShapeTool
+        canvas={fabricRef.current}
+        active={activeTool === TOOLS.SHAPE}
+        onAnnotationAdded={handleAnnotationAdded}
+      />
+      <StampTool
+        canvas={fabricRef.current}
+        active={activeTool === TOOLS.STAMP}
+        onAnnotationAdded={handleAnnotationAdded}
+      />
+      <RedactTool
+        canvas={fabricRef.current}
+        active={activeTool === TOOLS.REDACT}
+        onAnnotationAdded={handleAnnotationAdded}
+      />
     </div>
   );
 }
