@@ -1188,6 +1188,22 @@ html[data-theme="dark"] .exhibit-preview-text {
   flex-wrap: wrap;
 }
 
+.flex-wrap-row.gap-md { gap: 16px; }
+
+.flex-col-center {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.hf-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .btn-full {
   width: 100%;
   font-size: 13px;
@@ -1718,4 +1734,12 @@ html[data-theme="dark"] .exhibit-preview-text {
 @keyframes fadeOut {
   from { opacity: 1; transform: translateY(0); }
   to   { opacity: 0; transform: translateY(-6px); }
+}
+
+/* ── Undo Depth Badge ── */
+.undo-depth-badge {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  margin-left: 2px;
+  font-variant-numeric: tabular-nums;
 }

@@ -65,7 +65,7 @@ describe('initOnboarding', () => {
   });
 
   it('checks localStorage for tour completion status', () => {
-    const spy = vi.spyOn(Storage.prototype, 'getItem');
+    const spy = vi.spyOn(localStorage, 'getItem');
     initOnboarding();
     expect(spy).toHaveBeenCalledWith(TOUR_KEY);
     spy.mockRestore();

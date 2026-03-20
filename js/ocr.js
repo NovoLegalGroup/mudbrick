@@ -146,7 +146,7 @@ export async function runOCR(pdfDoc, pageNumbers, onProgress, options = {}) {
     }
 
     const avgConfidence = words.length ? words.reduce((s, w) => s + w.confidence, 0) / words.length : 0;
-    const lowConfidenceWords = words.filter(w => w.confidence < 70);
+    const lowConfidenceWords = words.filter(w => w.confidence < confidenceThreshold + 10);
 
     ocrResults[pageNum] = {
       words,
@@ -200,7 +200,7 @@ export async function isPageScanned(pdfDoc, pageNum) {
  * @param {HTMLElement} container — the #text-layer div
  * @param {object} viewport — PDF.js viewport at current zoom
  */
-export function renderOCRTextLayer(pageNum, container, viewport) {
+export function renderOCRTextLayer(pageNum, container, viewport, confidenceThreshold = 60) {
   const result = ocrResults[pageNum];
   if (!result || !result.words.length) return;
 
@@ -222,9 +222,9 @@ export function renderOCRTextLayer(pageNum, container, viewport) {
     span.dataset.wordIdx = String(wordIndex);
 
     // Confidence coloring classes
-    if (word.confidence < 50) {
+    if (word.confidence < confidenceThreshold) {
       span.classList.add('ocr-low-confidence');
-    } else if (word.confidence < 70) {
+    } else if (word.confidence < confidenceThreshold + 15) {
       span.classList.add('ocr-medium-confidence');
     }
 
@@ -412,4 +412,23 @@ export async function terminateOCR() {
  */
 export function clearOCRResults() {
   ocrResults = {};
+}
+
+/**
+ * Restore OCR results from recovery data (IndexedDB).
+ * @param {Object} results — ocrResults map (pageNum → result)
+ */
+export function restoreOCRResults(results) {
+  if (results && typeof results === 'object') {
+    ocrResults = results;
+  }
+}
+
+/**
+ * Get all OCR results for persistence.
+ * @returns {Object|null} ocrResults map, or null if empty
+ */
+export function getAllOCRResults() {
+  const keys = Object.keys(ocrResults);
+  return keys.length > 0 ? ocrResults : null;
 }

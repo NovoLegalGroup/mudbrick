@@ -5,6 +5,24 @@
 
 import { vi } from 'vitest';
 
+// ── Mock localStorage / sessionStorage ──
+// Node 22+ ships a built-in Proxy-backed localStorage that conflicts with
+// jsdom's Storage implementation (`.clear()` throws "trap returned falsish").
+// Replace both with a simple in-memory mock to keep tests deterministic.
+function createStorageMock() {
+  let store = {};
+  return {
+    getItem(key) { return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null; },
+    setItem(key, val) { store[key] = String(val); },
+    removeItem(key) { delete store[key]; },
+    clear() { store = {}; },
+    get length() { return Object.keys(store).length; },
+    key(idx) { return Object.keys(store)[idx] ?? null; },
+  };
+}
+vi.stubGlobal('localStorage', createStorageMock());
+vi.stubGlobal('sessionStorage', createStorageMock());
+
 // ── Mock window.PDFLib ──
 const mockPDFDocument = {
   getPageCount: vi.fn(() => 3),

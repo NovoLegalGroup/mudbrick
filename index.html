@@ -169,7 +169,7 @@
           <div class="ribbon-row">
             <button id="btn-undo" class="ribbon-btn" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>
               <span class="ribbon-icon" data-icon="undo"></span>
-              <span>Undo</span>
+              <span>Undo</span><span id="undo-depth" class="undo-depth-badge"></span>
             </button>
             <button id="btn-redo" class="ribbon-btn" title="Redo (Ctrl+Y)" aria-label="Redo" disabled>
               <span class="ribbon-icon" data-icon="redo"></span>
@@ -1287,7 +1287,10 @@
             <button class="btn-secondary btn-sm hf-token-btn" data-token="{page}">Page #</button>
             <button class="btn-secondary btn-sm hf-token-btn" data-token="{pages}">Total Pages</button>
             <button class="btn-secondary btn-sm hf-token-btn" data-token="{date}">Date</button>
+            <button class="btn-secondary btn-sm hf-token-btn" data-token="{time}">Time</button>
             <button class="btn-secondary btn-sm hf-token-btn" data-token="{filename}">Filename</button>
+            <button class="btn-secondary btn-sm hf-token-btn" data-token="{author}">Author</button>
+            <button class="btn-secondary btn-sm hf-token-btn" data-token="{title}">Title</button>
           </div>
         </div>
 
@@ -1333,6 +1336,17 @@
         <div class="modal-form-section">
           <div class="modal-form-grid-3">
             <div>
+              <label class="bates-label" for="hf-font">Font</label>
+              <select id="hf-font" class="bates-field" aria-label="Hf Font">
+                <option value="Helvetica">Helvetica</option>
+                <option value="HelveticaBold">Helvetica Bold</option>
+                <option value="TimesRoman">Times New Roman</option>
+                <option value="TimesRomanBold">Times New Roman Bold</option>
+                <option value="Courier">Courier</option>
+                <option value="CourierBold">Courier Bold</option>
+              </select>
+            </div>
+            <div>
               <label class="bates-label" for="hf-font-size">Font Size</label>
               <input id="hf-font-size" type="number" class="bates-field" value="10" min="6" max="36" aria-label="Hf Font Size">
             </div>
@@ -1340,12 +1354,27 @@
               <label class="bates-label" for="hf-color">Color</label>
               <input id="hf-color" type="color" class="bates-field modal-form-color" value="#000000" aria-label="Hf Color">
             </div>
+          </div>
+        </div>
+
+        <!-- Page range + margin row -->
+        <div class="modal-form-section">
+          <div class="modal-form-grid-3">
             <div>
               <label class="bates-label" for="hf-page-range">Page Range</label>
               <select id="hf-page-range" class="bates-field" aria-label="Hf Page Range">
                 <option value="all">All Pages</option>
                 <option value="custom">Custom</option>
               </select>
+            </div>
+            <div>
+              <label class="bates-label" for="hf-margin">Margin (inches)</label>
+              <input id="hf-margin" type="number" class="bates-field" value="0.5" min="0.25" max="1.5" step="0.25" aria-label="Hf Margin">
+            </div>
+            <div class="flex-col-center">
+              <label class="bates-label">&nbsp;</label>
+              <label class="hf-checkbox-label"><input type="checkbox" id="hf-skip-first"> Skip first page</label>
+              <label class="hf-checkbox-label"><input type="checkbox" id="hf-skip-last"> Skip last page</label>
             </div>
           </div>
         </div>
@@ -1354,6 +1383,14 @@
         <div id="hf-custom-range" class="hidden modal-form-section">
           <label class="bates-label" for="hf-range-input">Pages (e.g. 1-5, 8, 10-12)</label>
           <input id="hf-range-input" class="bates-field" placeholder="1-5, 8, 10-12">
+        </div>
+
+        <!-- Extra options -->
+        <div class="modal-form-section">
+          <div class="flex-wrap-row gap-md">
+            <label class="hf-checkbox-label"><input type="checkbox" id="hf-mirror"> Mirror left/right on odd/even</label>
+            <label class="hf-checkbox-label"><input type="checkbox" id="hf-draw-line"> Draw separator line</label>
+          </div>
         </div>
 
         <!-- Preview -->
@@ -1524,6 +1561,11 @@
           </label>
           <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:4px;">
             <input type="checkbox" id="ocr-show-confidence"> Show confidence highlighting
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:8px;">
+            Confidence threshold
+            <input type="range" id="ocr-confidence" min="30" max="90" value="60" step="5" style="flex:1;">
+            <span id="ocr-confidence-val" style="min-width:30px;text-align:right;">60%</span>
           </label>
         </div>
 

@@ -66,6 +66,7 @@ import {
   runOCR, hasOCRResults, renderOCRTextLayer, getOCRTextEntries,
   clearOCRResults, terminateOCR, isPageScanned,
   enableCorrectionMode, disableCorrectionMode, exportOCRText, getOCRStats,
+  restoreOCRResults, getAllOCRResults,
 } from './ocr.js';
 
 import { encryptPDF, removeMetadata, getMetadata, setMetadata, sanitizeDocument } from './security.js';
@@ -82,7 +83,7 @@ import {
   getAnnotationStats, flattenAnnotations,
 } from './comment-summary.js';
 import { compareDocuments, generateCompareReport, renderComparisonView } from './doc-compare.js';
-import { pushDocState, undoDoc, redoDoc, canUndoDoc, canRedoDoc, clearDocHistory } from './doc-history.js';
+import { pushDocState, undoDoc, redoDoc, canUndoDoc, canRedoDoc, clearDocHistory, onUndoEviction, undoDepth, redoDepth } from './doc-history.js';
 import { followLink, normalizeURL, extractLinksFromPage, createLinkRect } from './links.js';
 import { getAuthorName, setAuthorName, addReply, setThreadStatus, getAllThreads, exportThreadsXFDF } from './comments.js';
 import { restoreFonts } from './font-manager.js';
@@ -111,7 +112,98 @@ const State = {
   formFields: [],  // detected form field descriptors
   pdfLibDoc: null,  // pdf-lib document for form support
   _viewport: null,  // cached viewport for find highlights
+  operationInProgress: false,  // mutation lock — prevents concurrent doc operations
 };
+
+/* ═══════════════════ Operation Lock ═══════════════════ */
+
+let _lockSafetyTimer = null;
+
+/**
+ * Acquire the operation lock. Returns false if already locked.
+ * Disables mutation toolbar buttons to prevent user-initiated races.
+ */
+function acquireOperationLock(label = 'operation') {
+  if (State.operationInProgress) {
+    console.warn(`[Mudbrick] Blocked concurrent operation: ${label} (already in progress)`);
+    return false;
+  }
+  State.operationInProgress = true;
+  setToolbarEnabled(false);
+  // Safety timeout: auto-release after 30s to prevent permanent lock on unhandled errors
+  _lockSafetyTimer = setTimeout(() => {
+    if (State.operationInProgress) {
+      console.error(`[Mudbrick] Operation lock safety timeout — releasing after 30s (${label})`);
+      releaseOperationLock();
+    }
+  }, 30000);
+  return true;
+}
+
+/**
+ * Release the operation lock. Re-enables mutation toolbar buttons.
+ */
+function releaseOperationLock() {
+  if (_lockSafetyTimer) {
+    clearTimeout(_lockSafetyTimer);
+    _lockSafetyTimer = null;
+  }
+  State.operationInProgress = false;
+  setToolbarEnabled(true);
+}
+
+/**
+ * Enable or disable toolbar buttons that trigger document mutations.
+ * Non-mutation buttons (zoom, scroll, select tool, etc.) are not affected.
+ */
+function setToolbarEnabled(enabled) {
+  const mutationButtons = [
+    'btn-merge', 'btn-split', 'btn-export',
+    'btn-edit-text', 'btn-edit-image',
+    'btn-insert-blank', 'btn-bates', 'btn-headers-footers',
+    'btn-crop-page', 'btn-replace-pages', 'btn-ocr',
+    'btn-watermark', 'btn-encrypt', 'btn-metadata',
+    'btn-sanitize', 'btn-optimize', 'btn-flatten-annotations',
+    'btn-redact-search',
+  ];
+  for (const id of mutationButtons) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !enabled;
+  }
+  // Also disable page operation buttons in thumbnail context menus
+  document.querySelectorAll('[data-page-action]').forEach(el => {
+    el.disabled = !enabled;
+  });
+}
+
+function showConfirmDialog({ title, message, confirmLabel = 'OK', cancelLabel = 'Cancel' }) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-backdrop';
+    overlay.innerHTML = `
+      <div class="modal confirm-dialog">
+        <div class="modal-header"><h2>${title}</h2></div>
+        <div class="modal-body"><p>${message}</p></div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary cancel-btn">${cancelLabel}</button>
+          <button class="btn btn-primary confirm-btn">${confirmLabel}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const cleanup = (result) => {
+      overlay.remove();
+      resolve(result);
+    };
+
+    overlay.querySelector('.confirm-btn').onclick = () => cleanup(true);
+    overlay.querySelector('.cancel-btn').onclick = () => cleanup(false);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cleanup(false);
+    });
+  });
+}
 
 /* ═══════════════════ DOM References ═══════════════════ */
 
@@ -245,7 +337,16 @@ async function boot() {
       pageAnnotations: State.pageAnnotations,
       fileName: State.fileName,
       hasChanges: State.pdfDoc && hasAnnotations && hasAnnotations(),
+      ocrResults: getAllOCRResults(),
     }));
+
+    // Notify user when undo levels are evicted due to memory pressure
+    onUndoEviction(({ evictedCount, remainingLevels }) => {
+      toast(
+        `Undo history trimmed (${remainingLevels} level${remainingLevels !== 1 ? 's' : ''} remaining) — file is large`,
+        'warning'
+      );
+    });
 
     // Check for crash recovery data from a previous session
     try {
@@ -291,6 +392,14 @@ function showRecoveryBanner(fileName, timestamp) {
         if (data.pageAnnotations && Object.keys(data.pageAnnotations).length > 0) {
           State.pageAnnotations = data.pageAnnotations;
           loadPageAnnotations(State.currentPage);
+        }
+        if (data.ocrResults) {
+          restoreOCRResults(data.ocrResults);
+          // Re-render OCR text layer for current page
+          if (hasOCRResults(State.currentPage) && DOM.textLayer) {
+            const vp = State.pdfDoc ? await State.pdfDoc.getPage(State.currentPage).then(p => p.getViewport({ scale: State.scale })) : null;
+            if (vp) renderOCRTextLayer(State.currentPage, DOM.textLayer, vp);
+          }
         }
         toast('Session recovered successfully.', 'success');
         await clearRecoveryData();
@@ -1135,6 +1244,14 @@ function updateUndoRedoButtons() {
   if (DOM.btnRedo) {
     DOM.btnRedo.disabled = !(canRedoDoc() || canRedo(State.currentPage));
   }
+  const undoIndicator = document.getElementById('undo-depth');
+  if (undoIndicator) {
+    const depth = undoDepth();
+    undoIndicator.textContent = depth > 0 ? `(${depth})` : '';
+    undoIndicator.title = depth > 0
+      ? `${depth} undo level${depth !== 1 ? 's' : ''} available`
+      : 'No undo history';
+  }
 }
 
 async function handleUndo() {
@@ -1144,6 +1261,7 @@ async function handleUndo() {
     return;
   }
   if (canUndoDoc()) {
+    if (!acquireOperationLock('undo')) return;
     try {
       const prevBytes = undoDoc(State.pdfBytes);
       if (prevBytes) {
@@ -1153,6 +1271,8 @@ async function handleUndo() {
     } catch (err) {
       console.error('[undo] doc undo failed:', err);
       toast('Undo failed: ' + err.message, 'error');
+    } finally {
+      releaseOperationLock();
     }
     updateUndoRedoButtons();
     return;
@@ -1166,6 +1286,7 @@ async function handleUndo() {
 async function handleRedo() {
   // Try document-level redo first
   if (canRedoDoc()) {
+    if (!acquireOperationLock('redo')) return;
     try {
       const nextBytes = redoDoc(State.pdfBytes);
       if (nextBytes) {
@@ -1175,6 +1296,8 @@ async function handleRedo() {
     } catch (err) {
       console.error('[redo] doc redo failed:', err);
       toast('Redo failed: ' + err.message, 'error');
+    } finally {
+      releaseOperationLock();
     }
     updateUndoRedoButtons();
     return;
@@ -1210,6 +1333,7 @@ function handleEditText() {
 
 async function handleCommitTextEdits() {
   if (!isTextEditActive()) return;
+  if (!acquireOperationLock('commitTextEdits')) return;
   try {
     showLoading('Applying text edits…');
     const newBytes = await commitTextEdits(State.pdfBytes, State.currentPage);
@@ -1226,6 +1350,7 @@ async function handleCommitTextEdits() {
     exitTextEditMode();
     DOM.btnEditText.classList.remove('active');
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -1259,6 +1384,7 @@ function handleEditImage() {
 
 async function handleCommitImageEdits() {
   if (!isImageEditActive()) return;
+  if (!acquireOperationLock('commitImageEdits')) return;
   try {
     showLoading('Applying image edits…');
     // Capture a defensive copy of the pre-edit bytes BEFORE pdf-lib touches anything
@@ -1279,6 +1405,7 @@ async function handleCommitImageEdits() {
     DOM.btnEditImage.classList.remove('active');
     hideLoading();
     updateUndoRedoButtons();
+    releaseOperationLock();
   }
 }
 
@@ -1331,6 +1458,7 @@ async function executeReplace() {
   const replacement = $('replace-input').value;
   const matchInfo = getCurrentMatchInfo();
   if (!matchInfo || !State.pdfBytes) return;
+  if (!acquireOperationLock('replace')) return;
 
   showLoading('Replacing…');
   try {
@@ -1348,6 +1476,7 @@ async function executeReplace() {
     toast('Replace failed: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -1355,6 +1484,7 @@ async function executeReplaceAll() {
   const replacement = $('replace-input').value;
   const allInfos = getAllMatchInfos();
   if (!allInfos.length || !State.pdfBytes) return;
+  if (!acquireOperationLock('replaceAll')) return;
 
   showLoading('Replacing all…');
   try {
@@ -1371,6 +1501,7 @@ async function executeReplaceAll() {
     toast('Replace all failed: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -1662,6 +1793,7 @@ function showContextMenu(e, pageNum) {
 
     // Insert blank page
     if (action === 'insert-blank') {
+      if (!acquireOperationLock('insertBlank')) return;
       showLoading('Inserting page…');
       try {
         const newBytes = await insertBlankPage(State.pdfBytes, idx);
@@ -1673,6 +1805,7 @@ function showContextMenu(e, pageNum) {
         toast('Insert blank page failed: ' + err.message, 'error');
       } finally {
         hideLoading();
+        releaseOperationLock();
       }
       return;
     }
@@ -1695,6 +1828,7 @@ function showContextMenu(e, pageNum) {
 
     // Duplicate page via pdf-lib
     if (action === 'duplicate') {
+      if (!acquireOperationLock('duplicate')) return;
       showLoading('Duplicating page…');
       try {
         const PDFLib = window.PDFLib;
@@ -1710,10 +1844,31 @@ function showContextMenu(e, pageNum) {
         toast('Duplicate failed: ' + err.message, 'error');
       } finally {
         hideLoading();
+        releaseOperationLock();
       }
       return;
     }
 
+    // rotate/delete/extract actions
+    if (action === 'extract') {
+      // Extract doesn't mutate the document, no lock needed
+      showLoading('Extracting page…');
+      try {
+        const extracted = await splitPDF(State.pdfBytes, [[idx]]);
+        const part = extracted[0];
+        const name = State.fileName.replace('.pdf', '') + `_${part.label}.pdf`;
+        downloadBlob(part.bytes, name);
+        toast(`Extracted ${part.label}`, 'success');
+      } catch (err) {
+        console.error('Page operation failed:', err);
+        toast('Operation failed: ' + err.message, 'error');
+      } finally {
+        hideLoading();
+      }
+      return;
+    }
+
+    if (!acquireOperationLock('pageOperation')) return;
     showLoading('Editing page…');
     try {
       let newBytes;
@@ -1734,8 +1889,8 @@ function showContextMenu(e, pageNum) {
           toast('Rotated page 180°', 'success');
           break;
         case 'delete':
-          if (State.totalPages <= 1) return;
-          if (!confirm(`Delete page ${pageNum}? This cannot be undone.`)) return;
+          if (State.totalPages <= 1) break;
+          if (!confirm(`Delete page ${pageNum}? This cannot be undone.`)) break;
           newBytes = await deletePage(State.pdfBytes, idx);
           // If we deleted the current page or a page before it, adjust
           if (pageNum <= State.currentPage && State.currentPage > 1) {
@@ -1744,20 +1899,13 @@ function showContextMenu(e, pageNum) {
           await reloadAfterEdit(newBytes);
           toast(`Deleted page ${pageNum}`, 'success');
           break;
-        case 'extract': {
-          const extracted = await splitPDF(State.pdfBytes, [[idx]]);
-          const part = extracted[0];
-          const name = State.fileName.replace('.pdf', '') + `_${part.label}.pdf`;
-          downloadBlob(part.bytes, name);
-          toast(`Extracted ${part.label}`, 'success');
-          break;
-        }
       }
     } catch (err) {
       console.error('Page operation failed:', err);
       toast('Operation failed: ' + err.message, 'error');
     } finally {
       hideLoading();
+      releaseOperationLock();
     }
   });
 
@@ -1920,6 +2068,24 @@ function renderMergeFileList() {
 
 async function executeMerge() {
   if (mergeFiles.length < 2) return;
+
+  // Warn if the current document has unsaved work
+  const hasWork = Object.keys(State.pageAnnotations).some(k => {
+    const json = State.pageAnnotations[k];
+    return json?.objects?.length > 0;
+  });
+
+  if (hasWork) {
+    const confirmed = await showConfirmDialog({
+      title: 'Merge will create a new document',
+      message: 'Annotations, OCR results, and undo history for the current document will be lost. Consider exporting first.',
+      confirmLabel: 'Merge anyway',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+  }
+
+  if (!acquireOperationLock('merge')) return;
   showLoading('Merging PDFs…');
   try {
     const fileList = mergeFiles.map(f => ({ bytes: f.bytes }));
@@ -1932,6 +2098,7 @@ async function executeMerge() {
     toast('Merge failed: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -2186,6 +2353,7 @@ async function handleSave() {
     return;
   }
 
+  if (!acquireOperationLock('save')) return;
   showLoading('Saving…');
   try {
     // Bake form values first
@@ -2219,6 +2387,7 @@ async function handleSave() {
     toast('Save failed: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -2227,6 +2396,7 @@ async function handleSave() {
  */
 async function handleSaveDownload() {
   if (!State.pdfBytes) return;
+  if (!acquireOperationLock('saveDownload')) return;
 
   showLoading('Saving…');
   try {
@@ -2264,6 +2434,7 @@ async function handleSaveDownload() {
     toast('Save failed: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -2492,6 +2663,7 @@ function closeWatermarkModal() {
 
 async function executeWatermark() {
   if (!State.pdfBytes) return;
+  if (!acquireOperationLock('watermark')) return;
 
   const isImageMode = $('watermark-tab-image')?.classList.contains('active');
 
@@ -2500,7 +2672,7 @@ async function executeWatermark() {
     let newBytes;
     if (isImageMode) {
       const fileInput = $('watermark-image-file');
-      if (!fileInput?.files?.length) { hideLoading(); toast('Select an image file', 'warning'); return; }
+      if (!fileInput?.files?.length) { hideLoading(); releaseOperationLock(); toast('Select an image file', 'warning'); return; }
       const file = fileInput.files[0];
       const imageBytes = new Uint8Array(await file.arrayBuffer());
       const imageType = file.type.includes('png') ? 'png' : 'jpeg';
@@ -2517,7 +2689,7 @@ async function executeWatermark() {
       });
     } else {
       const text = $('watermark-text').value.trim();
-      if (!text) { hideLoading(); toast('Enter watermark text', 'warning'); return; }
+      if (!text) { hideLoading(); releaseOperationLock(); toast('Enter watermark text', 'warning'); return; }
 
       newBytes = await addWatermark(State.pdfBytes, {
         text,
@@ -2538,6 +2710,7 @@ async function executeWatermark() {
     toast('Watermark failed: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -2555,6 +2728,7 @@ function openNormalizePagesModal() {
 
 async function executeNormalize() {
   if (!State.pdfBytes) return;
+  if (!acquireOperationLock('normalize')) return;
 
   const selected = document.querySelector('input[name="normalize-size"]:checked')?.value || 'letter';
   let targetSize;
@@ -2577,6 +2751,7 @@ async function executeNormalize() {
     toast('Normalize failed: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -2631,6 +2806,7 @@ async function executeBates() {
     }
   }
 
+  if (!acquireOperationLock('bates')) return;
   showLoading('Applying Bates numbers…');
   try {
     const { bytes, firstLabel, lastLabel } = await applyBatesNumbers(State.pdfBytes, {
@@ -2661,6 +2837,7 @@ async function executeBates() {
     toast('Bates numbering failed: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -2750,6 +2927,7 @@ async function executeHeadersFooters() {
     return;
   }
 
+  if (!acquireOperationLock('headersFooters')) return;
   showLoading('Applying headers & footers…');
   try {
     const bytes = await applyHeadersFooters(State.pdfBytes, {
@@ -2761,9 +2939,15 @@ async function executeHeadersFooters() {
       bottomRight: $('hf-bottom-right').value,
       fontSize: parseInt($('hf-font-size').value) || 10,
       color: $('hf-color').value || '#000000',
+      fontFamily: $('hf-font')?.value || 'Helvetica',
+      margin: parseFloat($('hf-margin')?.value) || 0.5,
       filename: State.filename || 'document.pdf',
       startPage,
       endPage,
+      skipFirst: $('hf-skip-first')?.checked || false,
+      skipLast: $('hf-skip-last')?.checked || false,
+      mirror: $('hf-mirror')?.checked || false,
+      drawLine: $('hf-draw-line')?.checked || false,
     });
 
     closeHfModal();
@@ -2774,6 +2958,7 @@ async function executeHeadersFooters() {
     toast('Headers & footers failed: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -3002,6 +3187,7 @@ async function executeCrop() {
 
   const scope = $('crop-scope').value;
 
+  if (!acquireOperationLock('crop')) return;
   showLoading('Cropping pages…');
   try {
     const bytes = await cropPages(State.pdfBytes, {
@@ -3019,6 +3205,7 @@ async function executeCrop() {
     toast('Crop failed: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -3066,6 +3253,7 @@ function readFileAsDataUrl(file) {
  */
 async function handleAddPages(files, insertAfter) {
   if (!State.pdfBytes || !files.length) return;
+  if (!acquireOperationLock('addPages')) return;
   showLoading('Adding pages…');
   try {
     const additions = [];
@@ -3097,6 +3285,7 @@ async function handleAddPages(files, insertAfter) {
     toast('Failed to add pages: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -4563,11 +4752,12 @@ function wireEvents() {
 
     try {
       const language = $('ocr-language')?.value || 'eng';
+      const confidenceThreshold = parseInt($('ocr-confidence')?.value) || 60;
       await runOCR(State.pdfDoc, pageNumbers, (info) => {
         $('ocr-progress-label').textContent = info.status;
         $('ocr-progress-pct').textContent = Math.round(info.progress) + '%';
         $('ocr-progress-bar').style.width = info.progress + '%';
-      }, { language });
+      }, { language, confidenceThreshold });
 
       // Augment find text index with OCR results
       const ocrEntries = getOCRTextEntries();
@@ -4609,6 +4799,12 @@ function wireEvents() {
     }
   });
 
+  // OCR confidence slider live update
+  $('ocr-confidence')?.addEventListener('input', (e) => {
+    const val = $('ocr-confidence-val');
+    if (val) val.textContent = e.target.value + '%';
+  });
+
   // OCR enhancement event listeners
   $('ocr-show-confidence')?.addEventListener('change', (e) => {
     DOM.textLayer?.classList.toggle('ocr-confidence-toggle', e.target.checked);
@@ -4635,6 +4831,7 @@ function wireEvents() {
   // Edit ribbon — Insert Blank Page
   $('btn-insert-blank').addEventListener('click', async () => {
     if (!State.pdfBytes) return;
+    if (!acquireOperationLock('insertBlank')) return;
     showLoading('Inserting page…');
     try {
       const newBytes = await insertBlankPage(State.pdfBytes, State.currentPage - 1);
@@ -4644,6 +4841,7 @@ function wireEvents() {
       toast('Insert failed: ' + err.message, 'error');
     } finally {
       hideLoading();
+      releaseOperationLock();
     }
   });
 
@@ -4924,6 +5122,7 @@ function wireEvents() {
       let toIdx = toPage - 1;
       if (fromIdx === toIdx || fromIdx === toIdx - 1) return;
       if (fromIdx < toIdx) toIdx--;
+      if (!acquireOperationLock('reorder')) return;
       showLoading('Reordering pages…');
       try {
         const newBytes = await reorderPages(State.pdfBytes, fromIdx, toIdx);
@@ -4941,6 +5140,7 @@ function wireEvents() {
         toast('Reorder failed: ' + err.message, 'error');
       } finally {
         hideLoading();
+        releaseOperationLock();
       }
       return;
     }
@@ -5252,6 +5452,7 @@ async function executeEncrypt() {
   const userPwd = $('encrypt-user-pw').value.trim();
   const ownerPwd = $('encrypt-owner-pw').value.trim();
   if (!userPwd && !ownerPwd) { toast('Enter at least one password', 'error'); return; }
+  if (!acquireOperationLock('encrypt')) return;
 
   showLoading('Encrypting PDF…');
   try {
@@ -5270,6 +5471,7 @@ async function executeEncrypt() {
     toast('Encryption failed: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -5294,6 +5496,7 @@ async function openMetadataModal() {
 
 async function executeMetadataSave() {
   if (!State.pdfBytes) return;
+  if (!acquireOperationLock('metadataSave')) return;
   showLoading('Saving metadata…');
   try {
     const fields = {
@@ -5310,12 +5513,14 @@ async function executeMetadataSave() {
     toast('Failed to save metadata: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
 async function executeMetadataRemove() {
   if (!State.pdfBytes) return;
   if (!confirm('Remove all metadata from this document?')) return;
+  if (!acquireOperationLock('metadataRemove')) return;
   showLoading('Removing metadata…');
   try {
     const newBytes = await removeMetadata(State.pdfBytes);
@@ -5326,6 +5531,7 @@ async function executeMetadataRemove() {
     toast('Failed to remove metadata: ' + err.message, 'error');
   } finally {
     hideLoading();
+    releaseOperationLock();
   }
 }
 
@@ -5482,6 +5688,7 @@ async function executeCreateFromImages() {
 /* ── Optimize PDF ── */
 async function executeOptimize() {
   if (!State.pdfDoc || !State.pdfBytes) return;
+  if (!acquireOperationLock('optimize')) return;
 
   const mode = $('optimize-mode')?.value || 'smart';
   const preset = $('optimize-preset')?.value || 'ebook';
@@ -5529,6 +5736,7 @@ async function executeOptimize() {
   } catch (err) {
     toast('Optimization failed: ' + err.message, 'error');
   } finally {
+    releaseOperationLock();
     hideLoading();
   }
 }
@@ -5638,6 +5846,7 @@ function downloadCommentSummary() {
 async function executeFlattenAnnotations() {
   if (!State.pdfBytes) return;
   if (!confirm('Flatten all annotations into the PDF permanently? This cannot be undone.')) return;
+  if (!acquireOperationLock('flattenAnnotations')) return;
   showLoading('Flattening annotations…');
   try {
     const result = await flattenAnnotations({
@@ -5654,6 +5863,7 @@ async function executeFlattenAnnotations() {
   } catch (err) {
     toast('Flatten failed: ' + err.message, 'error');
   } finally {
+    releaseOperationLock();
     hideLoading();
   }
 }
@@ -5661,6 +5871,7 @@ async function executeFlattenAnnotations() {
 /* ── Form Creator ── */
 async function createFormFieldInteractive(fieldType) {
   if (!State.pdfLibDoc) { toast('Open a PDF first', 'error'); return; }
+  if (!acquireOperationLock('createFormField')) return;
   const pageIndex = State.currentPage - 1;
   const name = `${fieldType}_${Date.now()}`;
 
@@ -5678,6 +5889,8 @@ async function createFormFieldInteractive(fieldType) {
     toast(`Added ${fieldType} field "${name}"`, 'success');
   } catch (err) {
     toast('Failed to add field: ' + err.message, 'error');
+  } finally {
+    releaseOperationLock();
   }
 }
 
@@ -5691,6 +5904,7 @@ async function showTabOrder() {
 async function executeFormFlatten() {
   if (!State.pdfLibDoc) return;
   if (!confirm('Flatten all form fields? They will become non-editable.')) return;
+  if (!acquireOperationLock('formFlatten')) return;
   showLoading('Flattening form fields…');
   try {
     const newBytes = await flattenFormFields(State.pdfLibDoc);
@@ -5699,6 +5913,7 @@ async function executeFormFlatten() {
   } catch (err) {
     toast('Flatten failed: ' + err.message, 'error');
   } finally {
+    releaseOperationLock();
     hideLoading();
   }
 }
@@ -5706,6 +5921,7 @@ async function executeFormFlatten() {
 /* ── Form Data Import/Export ── */
 async function executeFormDataImport() {
   if (!State.pdfLibDoc || !_formDataFile) { toast('Select a file to import', 'error'); return; }
+  if (!acquireOperationLock('formDataImport')) return;
   showLoading('Importing form data…');
   try {
     const text = await _formDataFile.text();
@@ -5725,6 +5941,7 @@ async function executeFormDataImport() {
   } catch (err) {
     toast('Import failed: ' + err.message, 'error');
   } finally {
+    releaseOperationLock();
     hideLoading();
   }
 }
@@ -5826,6 +6043,7 @@ function openSanitizeModal() {
 
 async function executeSanitize() {
   if (!State.pdfBytes) return;
+  if (!acquireOperationLock('sanitize')) return;
   showLoading('Sanitizing document…');
   try {
     const result = await sanitizeDocument(State.pdfBytes);
@@ -5840,6 +6058,7 @@ async function executeSanitize() {
   } catch (err) {
     toast('Sanitization failed: ' + err.message, 'error');
   } finally {
+    releaseOperationLock();
     hideLoading();
   }
 }
@@ -6019,6 +6238,7 @@ async function executeReplacePages() {
     return;
   }
 
+  if (!acquireOperationLock('replacePages')) return;
   showLoading('Replacing pages…');
   try {
     const newBytes = await replacePages(State.pdfBytes, _replaceSourceBytes, mappings);
@@ -6028,6 +6248,7 @@ async function executeReplacePages() {
   } catch (err) {
     toast('Replace failed: ' + err.message, 'error');
   } finally {
+    releaseOperationLock();
     hideLoading();
   }
 }

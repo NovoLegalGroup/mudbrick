@@ -158,12 +158,14 @@ export function initAutoRecovery(getState) {
       const state = _getStateForSave();
       if (!state || !state.pdfBytes || !state.hasChanges) return;
 
-      await idbPut(RECOVERY_KEY, {
+      const payload = {
         pdfBytes: state.pdfBytes,
         pageAnnotations: state.pageAnnotations,
         fileName: state.fileName,
         timestamp: Date.now(),
-      });
+      };
+      if (state.ocrResults) payload.ocrResults = state.ocrResults;
+      await idbPut(RECOVERY_KEY, payload);
     } catch (e) {
       // Silent fail for auto-save -- don't bother the user
       console.warn('[Mudbrick] Auto-save failed:', e);
@@ -199,11 +201,13 @@ export async function recoverSession() {
   try {
     const data = await idbGet(RECOVERY_KEY);
     if (data && data.pdfBytes) {
-      return {
+      const result = {
         pdfBytes: new Uint8Array(data.pdfBytes),
         pageAnnotations: data.pageAnnotations || {},
         fileName: data.fileName || 'recovered.pdf',
       };
+      if (data.ocrResults) result.ocrResults = data.ocrResults;
+      return result;
     }
   } catch (e) {
     console.error('[Mudbrick] Recovery failed:', e);

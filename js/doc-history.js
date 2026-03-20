@@ -14,11 +14,12 @@
  *   const next = redoDoc();       // returns Uint8Array or null
  */
 
-const MAX_DOC_HISTORY = 10;
+const MAX_DOC_HISTORY = 5;
 const MAX_MEMORY_BYTES = 300 * 1024 * 1024; // 300 MB
 
 let undoStack = [];  // Uint8Array[]
 let redoStack = [];  // Uint8Array[]
+let _onEvict = null;
 
 /** Total bytes currently stored across both stacks. */
 function totalMemory() {
@@ -30,8 +31,13 @@ function totalMemory() {
 
 /** Evict oldest undo entries until within memory budget, but always keep at least one. */
 function evictIfNeeded() {
+  let evicted = 0;
   while (undoStack.length > 1 && totalMemory() > MAX_MEMORY_BYTES) {
     undoStack.shift();
+    evicted++;
+  }
+  if (evicted > 0 && _onEvict) {
+    _onEvict({ evictedCount: evicted, remainingLevels: undoStack.length });
   }
 }
 
@@ -91,3 +97,14 @@ export function clearDocHistory() {
   undoStack = [];
   redoStack = [];
 }
+
+/**
+ * Register a callback that fires when undo entries are evicted due to memory pressure.
+ * @param {Function} cb - Called with { evictedCount: number, remainingLevels: number }
+ */
+export function onUndoEviction(cb) {
+  _onEvict = cb;
+}
+
+export function undoDepth() { return undoStack.length; }
+export function redoDepth() { return redoStack.length; }

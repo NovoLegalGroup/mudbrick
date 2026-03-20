@@ -35,14 +35,14 @@ describe('pushDocState', () => {
     expect(canRedoDoc()).toBe(false);
   });
 
-  it('caps undo stack at MAX_DOC_HISTORY (10)', () => {
+  it('caps undo stack at MAX_DOC_HISTORY (5)', () => {
     for (let i = 0; i < 15; i++) {
       pushDocState(new Uint8Array([i]));
     }
-    // Should have at most 10 items
+    // Should have at most 5 items
     let count = 0;
     while (undoDoc(new Uint8Array([99])) !== null) count++;
-    expect(count).toBe(10);
+    expect(count).toBe(5);
   });
 
   it('ignores falsy input', () => {

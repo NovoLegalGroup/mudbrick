@@ -8,6 +8,26 @@
 const getPDFLib = () => window.PDFLib;
 
 let pdfLibDoc = null;
+let _editInProgress = false;
+
+/**
+ * Guard wrapper for mutation functions. Prevents concurrent access to pdfLibDoc.
+ * Defense-in-depth — the primary lock is acquireOperationLock() in app.js.
+ */
+async function withEditGuard(label, fn) {
+  if (_editInProgress) {
+    throw new Error(`Cannot start "${label}" — another edit is in progress`);
+  }
+  _editInProgress = true;
+  try {
+    return await fn();
+  } finally {
+    _editInProgress = false;
+  }
+}
+
+/** Reset the edit guard (for test cleanup). */
+export function _resetEditGuard() { _editInProgress = false; }
 
 /* ── Lazy Initialization ── */
 
@@ -33,22 +53,26 @@ export async function saveToBytes() {
 
 /** Rotate a page by the given degrees (90, 180, 270, -90, etc.) */
 export async function rotatePage(pdfBytes, pageIndex, degrees) {
-  const doc = await ensurePdfLib(pdfBytes);
-  const page = doc.getPage(pageIndex);
-  const rot = page.getRotation();
-  const current = (rot && typeof rot.angle === 'number') ? rot.angle : 0;
-  page.setRotation(getPDFLib().degrees((current + degrees) % 360));
-  return doc.save();
+  return withEditGuard('rotatePage', async () => {
+    const doc = await ensurePdfLib(pdfBytes);
+    const page = doc.getPage(pageIndex);
+    const rot = page.getRotation();
+    const current = (rot && typeof rot.angle === 'number') ? rot.angle : 0;
+    page.setRotation(getPDFLib().degrees((current + degrees) % 360));
+    return doc.save();
+  });
 }
 
 /** Delete a page by index (0-based). Returns new bytes. */
 export async function deletePage(pdfBytes, pageIndex) {
-  const doc = await ensurePdfLib(pdfBytes);
-  if (doc.getPageCount() <= 1) {
-    throw new Error('Cannot delete the only remaining page');
-  }
-  doc.removePage(pageIndex);
-  return doc.save();
+  return withEditGuard('deletePage', async () => {
+    const doc = await ensurePdfLib(pdfBytes);
+    if (doc.getPageCount() <= 1) {
+      throw new Error('Cannot delete the only remaining page');
+    }
+    doc.removePage(pageIndex);
+    return doc.save();
+  });
 }
 
 /**
@@ -57,24 +81,26 @@ export async function deletePage(pdfBytes, pageIndex) {
  * Returns new bytes.
  */
 export async function reorderPages(pdfBytes, fromIndex, toIndex) {
-  const doc = await ensurePdfLib(pdfBytes);
-  const count = doc.getPageCount();
-  if (fromIndex === toIndex) return doc.save();
+  return withEditGuard('reorderPages', async () => {
+    const doc = await ensurePdfLib(pdfBytes);
+    const count = doc.getPageCount();
+    if (fromIndex === toIndex) return doc.save();
 
-  // Build new page order
-  const order = Array.from({ length: count }, (_, i) => i);
-  const [removed] = order.splice(fromIndex, 1);
-  order.splice(toIndex, 0, removed);
+    // Build new page order
+    const order = Array.from({ length: count }, (_, i) => i);
+    const [removed] = order.splice(fromIndex, 1);
+    order.splice(toIndex, 0, removed);
 
-  // Create new document with reordered pages
-  const { PDFDocument } = getPDFLib();
-  const newDoc = await PDFDocument.create();
-  const copiedPages = await newDoc.copyPages(doc, order);
-  copiedPages.forEach(p => newDoc.addPage(p));
+    // Create new document with reordered pages
+    const { PDFDocument } = getPDFLib();
+    const newDoc = await PDFDocument.create();
+    const copiedPages = await newDoc.copyPages(doc, order);
+    copiedPages.forEach(p => newDoc.addPage(p));
 
-  // Replace internal doc reference
-  pdfLibDoc = newDoc;
-  return newDoc.save();
+    // Replace internal doc reference
+    pdfLibDoc = newDoc;
+    return newDoc.save();
+  });
 }
 
 /* ═══════════════════ Phase 3: Merge & Split ═══════════════════ */
@@ -84,18 +110,20 @@ export async function reorderPages(pdfBytes, fromIndex, toIndex) {
  * Returns new bytes for the merged document.
  */
 export async function mergePDFs(fileList) {
-  const { PDFDocument } = getPDFLib();
-  const merged = await PDFDocument.create();
+  return withEditGuard('mergePDFs', async () => {
+    const { PDFDocument } = getPDFLib();
+    const merged = await PDFDocument.create();
 
-  for (const { bytes } of fileList) {
-    const donor = await PDFDocument.load(bytes, { ignoreEncryption: true });
-    const indices = donor.getPageIndices();
-    const pages = await merged.copyPages(donor, indices);
-    pages.forEach(p => merged.addPage(p));
-  }
+    for (const { bytes } of fileList) {
+      const donor = await PDFDocument.load(bytes, { ignoreEncryption: true });
+      const indices = donor.getPageIndices();
+      const pages = await merged.copyPages(donor, indices);
+      pages.forEach(p => merged.addPage(p));
+    }
 
-  pdfLibDoc = merged;
-  return merged.save();
+    pdfLibDoc = merged;
+    return merged.save();
+  });
 }
 
 /**
@@ -137,24 +165,26 @@ export async function splitPDF(pdfBytes, ranges) {
  * @returns {Promise<Uint8Array>} New PDF bytes with pages appended
  */
 export async function appendPages(basePdfBytes, additions, insertAfter) {
-  const { PDFDocument } = getPDFLib();
-  const baseDoc = await PDFDocument.load(basePdfBytes, { ignoreEncryption: true });
-  const baseCount = baseDoc.getPageCount();
-  const insertIdx = insertAfter !== undefined ? insertAfter + 1 : baseCount;
+  return withEditGuard('appendPages', async () => {
+    const { PDFDocument } = getPDFLib();
+    const baseDoc = await PDFDocument.load(basePdfBytes, { ignoreEncryption: true });
+    const baseCount = baseDoc.getPageCount();
+    const insertIdx = insertAfter !== undefined ? insertAfter + 1 : baseCount;
 
-  let offset = 0;
-  for (const { bytes } of additions) {
-    const donor = await PDFDocument.load(bytes, { ignoreEncryption: true });
-    const indices = donor.getPageIndices();
-    const pages = await baseDoc.copyPages(donor, indices);
-    for (let i = 0; i < pages.length; i++) {
-      baseDoc.insertPage(insertIdx + offset, pages[i]);
-      offset++;
+    let offset = 0;
+    for (const { bytes } of additions) {
+      const donor = await PDFDocument.load(bytes, { ignoreEncryption: true });
+      const indices = donor.getPageIndices();
+      const pages = await baseDoc.copyPages(donor, indices);
+      for (let i = 0; i < pages.length; i++) {
+        baseDoc.insertPage(insertIdx + offset, pages[i]);
+        offset++;
+      }
     }
-  }
 
-  pdfLibDoc = baseDoc;
-  return baseDoc.save();
+    pdfLibDoc = baseDoc;
+    return baseDoc.save();
+  });
 }
 
 /* ═══════════════════ Replace Pages ═══════════════════ */
@@ -167,27 +197,29 @@ export async function appendPages(basePdfBytes, additions, insertAfter) {
  * @returns {Promise<Uint8Array>} New PDF bytes with pages replaced
  */
 export async function replacePages(basePdfBytes, sourcePdfBytes, mappings) {
-  const { PDFDocument } = getPDFLib();
-  const baseDoc = await PDFDocument.load(basePdfBytes, { ignoreEncryption: true });
-  const sourceDoc = await PDFDocument.load(sourcePdfBytes, { ignoreEncryption: true });
+  return withEditGuard('replacePages', async () => {
+    const { PDFDocument } = getPDFLib();
+    const baseDoc = await PDFDocument.load(basePdfBytes, { ignoreEncryption: true });
+    const sourceDoc = await PDFDocument.load(sourcePdfBytes, { ignoreEncryption: true });
 
-  // Sort descending by target page to avoid index shifts
-  const sorted = [...mappings].sort((a, b) => b.targetPage - a.targetPage);
+    // Sort descending by target page to avoid index shifts
+    const sorted = [...mappings].sort((a, b) => b.targetPage - a.targetPage);
 
-  for (const { targetPage, sourcePage } of sorted) {
-    const targetIdx = targetPage - 1;
-    const sourceIdx = sourcePage - 1;
+    for (const { targetPage, sourcePage } of sorted) {
+      const targetIdx = targetPage - 1;
+      const sourceIdx = sourcePage - 1;
 
-    if (targetIdx < 0 || targetIdx >= baseDoc.getPageCount()) continue;
-    if (sourceIdx < 0 || sourceIdx >= sourceDoc.getPageCount()) continue;
+      if (targetIdx < 0 || targetIdx >= baseDoc.getPageCount()) continue;
+      if (sourceIdx < 0 || sourceIdx >= sourceDoc.getPageCount()) continue;
 
-    const [copiedPage] = await baseDoc.copyPages(sourceDoc, [sourceIdx]);
-    baseDoc.removePage(targetIdx);
-    baseDoc.insertPage(targetIdx, copiedPage);
-  }
+      const [copiedPage] = await baseDoc.copyPages(sourceDoc, [sourceIdx]);
+      baseDoc.removePage(targetIdx);
+      baseDoc.insertPage(targetIdx, copiedPage);
+    }
 
-  pdfLibDoc = baseDoc;
-  return baseDoc.save();
+    pdfLibDoc = baseDoc;
+    return baseDoc.save();
+  });
 }
 
 /* ═══════════════════ Insert Blank Page ═══════════════════ */
@@ -201,21 +233,23 @@ export async function replacePages(basePdfBytes, sourcePdfBytes, mappings) {
  * @returns {Promise<Uint8Array>} New PDF bytes
  */
 export async function insertBlankPage(pdfBytes, afterIndex, width, height) {
-  const doc = await ensurePdfLib(pdfBytes);
+  return withEditGuard('insertBlankPage', async () => {
+    const doc = await ensurePdfLib(pdfBytes);
 
-  // Default to dimensions of the reference page (or Letter size)
-  if (width == null || height == null) {
-    const refIdx = Math.max(0, Math.min(afterIndex, doc.getPageCount() - 1));
-    const refPage = doc.getPage(refIdx);
-    const refSize = refPage.getSize();
-    width = width ?? refSize.width;
-    height = height ?? refSize.height;
-  }
+    // Default to dimensions of the reference page (or Letter size)
+    if (width == null || height == null) {
+      const refIdx = Math.max(0, Math.min(afterIndex, doc.getPageCount() - 1));
+      const refPage = doc.getPage(refIdx);
+      const refSize = refPage.getSize();
+      width = width ?? refSize.width;
+      height = height ?? refSize.height;
+    }
 
-  const insertAt = afterIndex + 1; // insertPage is 0-based position
-  doc.insertPage(insertAt, [width, height]);
+    const insertAt = afterIndex + 1; // insertPage is 0-based position
+    doc.insertPage(insertAt, [width, height]);
 
-  return doc.save();
+    return doc.save();
+  });
 }
 
 /* ═══════════════════ Page Crop ═══════════════════ */
@@ -235,53 +269,55 @@ export async function insertBlankPage(pdfBytes, afterIndex, width, height) {
  * @returns {Promise<Uint8Array>}
  */
 export async function cropPages(pdfBytes, opts = {}) {
-  const doc = await ensurePdfLib(pdfBytes);
-  const {
-    top = 0, bottom = 0, left = 0, right = 0,
-    pages = 'all',
-    currentPage = 1,
-  } = opts;
+  return withEditGuard('cropPages', async () => {
+    const doc = await ensurePdfLib(pdfBytes);
+    const {
+      top = 0, bottom = 0, left = 0, right = 0,
+      pages = 'all',
+      currentPage = 1,
+    } = opts;
 
-  const pageCount = doc.getPageCount();
-  const startIdx = pages === 'current' ? currentPage - 1 : 0;
-  const endIdx = pages === 'current' ? currentPage : pageCount;
+    const pageCount = doc.getPageCount();
+    const startIdx = pages === 'current' ? currentPage - 1 : 0;
+    const endIdx = pages === 'current' ? currentPage : pageCount;
 
-  for (let i = startIdx; i < endIdx; i++) {
-    const page = doc.getPage(i);
-    const rotation = page.getRotation().angle % 360;
+    for (let i = startIdx; i < endIdx; i++) {
+      const page = doc.getPage(i);
+      const rotation = page.getRotation().angle % 360;
 
-    // Use existing CropBox as reference (defaults to MediaBox if none set)
-    const cropBox = page.getCropBox();
-    const mediaBox = page.getMediaBox();
-    const box = (cropBox && cropBox.width > 0) ? cropBox : mediaBox;
-    const { x: rx, y: ry, width: rw, height: rh } = box;
+      // Use existing CropBox as reference (defaults to MediaBox if none set)
+      const cropBox = page.getCropBox();
+      const mediaBox = page.getMediaBox();
+      const box = (cropBox && cropBox.width > 0) ? cropBox : mediaBox;
+      const { x: rx, y: ry, width: rw, height: rh } = box;
 
-    // Map visual margins to MediaBox coordinates based on rotation.
-    // Visual margins are relative to the rendered (rotation-aware) page.
-    let cx, cy, cw, ch;
-    if (rotation === 90) {
-      cx = rx + top;    cy = ry + left;
-      cw = rw - top - bottom;  ch = rh - left - right;
-    } else if (rotation === 180) {
-      cx = rx + right;  cy = ry + top;
-      cw = rw - left - right;  ch = rh - top - bottom;
-    } else if (rotation === 270) {
-      cx = rx + bottom;  cy = ry + right;
-      cw = rw - top - bottom;  ch = rh - left - right;
-    } else {
-      // 0° (default)
-      cx = rx + left;   cy = ry + bottom;
-      cw = rw - left - right;  ch = rh - top - bottom;
+      // Map visual margins to MediaBox coordinates based on rotation.
+      // Visual margins are relative to the rendered (rotation-aware) page.
+      let cx, cy, cw, ch;
+      if (rotation === 90) {
+        cx = rx + top;    cy = ry + left;
+        cw = rw - top - bottom;  ch = rh - left - right;
+      } else if (rotation === 180) {
+        cx = rx + right;  cy = ry + top;
+        cw = rw - left - right;  ch = rh - top - bottom;
+      } else if (rotation === 270) {
+        cx = rx + bottom;  cy = ry + right;
+        cw = rw - top - bottom;  ch = rh - left - right;
+      } else {
+        // 0° (default)
+        cx = rx + left;   cy = ry + bottom;
+        cw = rw - left - right;  ch = rh - top - bottom;
+      }
+
+      if (cw < 36 || ch < 36) {
+        throw new Error(`Crop margins too large for page ${i + 1} (${Math.round(rw)}×${Math.round(rh)} pt). Remaining area would be ${Math.round(cw)}×${Math.round(ch)} pt.`);
+      }
+
+      page.setCropBox(cx, cy, cw, ch);
     }
 
-    if (cw < 36 || ch < 36) {
-      throw new Error(`Crop margins too large for page ${i + 1} (${Math.round(rw)}×${Math.round(rh)} pt). Remaining area would be ${Math.round(cw)}×${Math.round(ch)} pt.`);
-    }
-
-    page.setCropBox(cx, cy, cw, ch);
-  }
-
-  return doc.save();
+    return doc.save();
+  });
 }
 
 /**
@@ -312,6 +348,7 @@ export async function getPageDimensions(pdfBytes, pageIndex) {
  * @returns {Promise<Uint8Array>} New PDF bytes
  */
 export async function addWatermark(pdfBytes, opts = {}) {
+  return withEditGuard('addWatermark', async () => {
   const PDFLib = getPDFLib();
   const doc = await ensurePdfLib(pdfBytes);
 
@@ -365,11 +402,13 @@ export async function addWatermark(pdfBytes, opts = {}) {
   }
 
   return doc.save();
+  });
 }
 
 /* ═══════════════════ Image Watermark ═══════════════════ */
 
 export async function addImageWatermark(pdfBytes, opts = {}) {
+  return withEditGuard('addImageWatermark', async () => {
   const PDFLib = getPDFLib();
   const doc = await ensurePdfLib(pdfBytes);
   const {
@@ -425,6 +464,7 @@ export async function addImageWatermark(pdfBytes, opts = {}) {
     }
   }
   return doc.save();
+  });
 }
 
 /* ═══════════════════ Normalize Page Sizes ═══════════════════ */
@@ -437,6 +477,7 @@ export async function addImageWatermark(pdfBytes, opts = {}) {
  * @returns {Promise<Uint8Array>}
  */
 export async function normalizePageSizes(pdfBytes, targetSize) {
+  return withEditGuard('normalizePageSizes', async () => {
   const PDFLib = getPDFLib();
   const doc = await ensurePdfLib(pdfBytes);
 
@@ -492,4 +533,5 @@ export async function normalizePageSizes(pdfBytes, targetSize) {
   }
 
   return doc.save();
+  });
 }
