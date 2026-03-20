@@ -4,6 +4,8 @@ Step-by-step checklist for cutting a production release of Mudbrick v2.
 
 ## Pre-Release
 
+- [ ] Pre-7 gate marked PASS in `PRE7-GATE-STATUS.md`
+- [ ] Automated test inventory is current (see `AUTOMATED-TEST-INVENTORY.md`)
 - [ ] All CI checks green on `mudbrickv2` branch
 - [ ] Full manual QA matrix completed (see `QA-MATRIX.md`)
 - [ ] Performance baseline measurements within targets (see `PERFORMANCE-BASELINE.md`)

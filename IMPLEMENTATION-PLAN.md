@@ -15,7 +15,7 @@ Mudbrick v2 replaces the current 28K LOC vanilla JS PWA with a **Windows desktop
 
 Key upgrades over v1: forensic redaction (strips PDF objects), local OCR (faster/more accurate via pytesseract), unlimited undo history, proper 100MB+ file handling with no browser memory pressure, and a maintainable component-based frontend.
 
-Timeline: 20 weeks (5 months) across 4 phases. Phase 1 MVP in 6 weeks.
+Timeline: 20 weeks (5 months) across 4 baseline phases. Phase 1 MVP in 6 weeks. A post-parity utility expansion has since also been delivered for create-from-images, PDF optimization, and embedded attachments.
 
 Branch strategy: New branch `mudbrickv2` in the existing `mudbrick` repo. If successful, replaces main after testing.
 
@@ -153,7 +153,8 @@ mudbrick-v2/
 │   │   │   │   │   └── RedactionReview.tsx     # Review matches before applying
 │   │   │   │   ├── sidebar/
 │   │   │   │   │   ├── PageList.tsx            # Thumbnails, drag reorder
-│   │   │   │   │   └── OutlinePanel.tsx        # Bookmarks
+│   │   │   │   │   ├── OutlinePanel.tsx        # Bookmarks
+│   │   │   │   │   └── AttachmentsPanel.tsx    # Embedded file management
 │   │   │   │   ├── shared/
 │   │   │   │   │   ├── Toast.tsx
 │   │   │   │   │   ├── LoadingOverlay.tsx
@@ -208,9 +209,10 @@ mudbrick-v2/
 │       │   ├── dependencies.py             # Shared dependencies (session lookup)
 │       │   ├── routers/
 │       │   │   ├── __init__.py
-│       │   │   ├── documents.py            # Open file, save, save-as, close, session info
+│       │   │   ├── documents.py            # Open file, create from images, optimize, save, save-as, close, session info
 │       │   │   ├── pages.py                # Rotate, delete, reorder, insert, crop
 │       │   │   ├── merge.py                # Merge multiple PDFs
+│       │   │   ├── attachments.py          # Embedded attachment list/add/export/delete
 │       │   │   ├── split.py                # Split by page ranges
 │       │   │   ├── ocr.py                  # OCR with SSE streaming progress
 │       │   │   ├── redaction.py            # Pattern search + forensic redaction
@@ -547,6 +549,180 @@ Before Stage 7 starts, the team must produce:
 - A performance baseline report for the core desktop flows
 - A short "Stage 7 approved" sign-off note naming remaining known issues
 
+Working artifact files for this gate:
+
+- [AUTOMATED-TEST-INVENTORY.md](AUTOMATED-TEST-INVENTORY.md)
+- [QA-MATRIX.md](QA-MATRIX.md)
+- [PERFORMANCE-BASELINE.md](PERFORMANCE-BASELINE.md)
+- [PRE7-GATE-STATUS.md](PRE7-GATE-STATUS.md)
+
+Current local validation blocker:
+
+- There is no runnable Python interpreter in this shell for backend tests, so backend `pytest` execution remains blocked until the local environment is repaired.
+
+#### UI Remediation Plan (Required Before Declaring Polish Complete)
+
+The current desktop UI needs a focused cleanup pass before we call the product polished or start relying on Stage 7 packaging work as the main remaining risk. This plan converts the UI audit into concrete engineering work with a strict order of operations.
+
+Implementation-level companion specs:
+
+- [UI-SHELL-SPEC.md](UI-SHELL-SPEC.md) -- target shell layout, pane model, responsive rules, and state ownership
+- [UI-COMPONENT-MAP.md](UI-COMPONENT-MAP.md) -- current-to-target component mapping and file-level refactor plan
+- [UI-INTERACTION-MATRIX.md](UI-INTERACTION-MATRIX.md) -- command, pane, dialog, keyboard, and QA interaction contract
+
+##### Goals
+
+- Remove any UI that advertises functionality the user cannot actually use
+- Unify interaction patterns so dialogs, toolbars, onboarding, and navigation behave consistently
+- Make the desktop shell resilient at common Windows app sizes before release QA
+- Fold the fixes into the Pre-7 gate so "polish" means real usability, not just visual cleanup
+
+##### Visual Direction: Acrobat-Familiar, Modernized
+
+The target is a desktop PDF editor that feels immediately legible to users coming from Adobe Acrobat, while still looking cleaner, lighter, and more current. We should copy the **mental model**, not clone Adobe's exact chrome.
+
+###### Design thesis
+
+- Familiar information architecture for Acrobat-trained users
+- Modern spacing, typography, icons, and reduced visual noise
+- Strong desktop-app feel rather than a web page stretched into a window
+- Mudbrick keeps its own brand and component system; we do not imitate Adobe assets 1:1
+
+###### What should feel familiar
+
+- Top-of-window command area with document controls, page navigation, and zoom close to the viewer
+- Left navigation rail for thumbnails, bookmarks/outline, and related document-navigation tools
+- Large central canvas with a neutral surround and obvious active page focus
+- Right-side task pane for advanced tools such as security, comparison, forms, and redaction
+- Clear separation between "quick actions" and "task-oriented panels"
+- Toolbar grouping that matches PDF editor expectations: file, navigate, annotate, organize, protect, export
+
+###### What should feel modern
+
+- Fewer gradients, bevels, and legacy chrome lines
+- Cleaner spacing and larger hit targets
+- A restrained neutral palette with selective Novo/Mudbrick accent usage
+- Simpler iconography with consistent stroke weight
+- Better visual hierarchy so the document stays dominant
+- Collapsible panels and overflow behavior instead of permanently crowded toolbars
+
+###### Target Layout Blueprint
+
+| Region | Acrobat-Familiar Behavior | Modernized Mudbrick Interpretation |
+|---|---|---|
+| Native window top | Desktop title/menu feel | Use Tauri window chrome or native-feeling top bar with file/edit/view style entry points where appropriate |
+| Primary command row | Quick access commands near the top | Open, save, save as, print, undo/redo, compare, security, export, and mode toggles in a compact primary row |
+| Viewer utility row | Page number, page count, zoom, fit controls live close to the document | Keep page nav and zoom directly above the canvas with clearer grouping and less clutter |
+| Left sidebar | Persistent page thumbnails and outline access | Add a narrow icon rail plus a content pane so users can switch between Pages, Outline, Attachments, and similar nav views |
+| Center canvas | Main reading/editing surface | Keep a calm gray workspace with a crisp white page, stronger page shadow, and better active-page emphasis |
+| Right task pane | Tool-specific panel for editing/protection/forms | Use a collapsible task pane that changes by active mode instead of spraying every tool across the top bar |
+| Bottom status area | Lightweight document status | Optional slim status bar for page info, selection state, OCR state, and background task progress |
+
+###### Style System Guidance
+
+- Typography: use a Windows-native desktop stack centered on `Segoe UI Variable`/`Segoe UI`, with stronger contrast between app chrome text and document content
+- Color: neutral shell grays, white document canvas, dark text, subtle dividers, and red accent reserved for high-importance active states and destructive tools
+- Icons: monochrome line icons with occasional accent color only for warnings, redaction, or destructive actions
+- Surfaces: rely on panel separation, border contrast, and spacing instead of heavy shadows or skeuomorphic shading
+- Motion: minimal desktop-grade motion only; fast panel transitions and dialog entrance, no playful animation
+
+###### Key UX Rules
+
+- The document must remain the visual focal point at all times
+- Frequently used controls should stay visible; infrequent tools should move to the right task pane or overflow menus
+- Tool placement should stay stable between sessions so Acrobat users build confidence quickly
+- Primary document actions should not require hunting through modal-only flows
+- The shell should read as a professional legal/document application, not a consumer creative tool
+
+###### Non-Goals
+
+- Do not create a pixel-for-pixel Acrobat clone
+- Do not import Adobe-style gradients, skeuomorphic buttons, or outdated icon art
+- Do not overload the top bar with every feature just because Acrobat historically did
+- Do not sacrifice accessibility or responsiveness in order to mimic legacy desktop chrome
+
+###### Rollout Plan for the Visual Refresh
+
+1. Define the shell blueprint and toolbar grouping before changing colors or CSS details
+2. Build the new app frame: top command rows, left navigation structure, center viewer container, right task pane
+3. Migrate existing feature entry points into that frame so advanced tools become reachable in familiar locations
+4. Refresh tokens, icons, spacing, and typography only after the layout is stable
+5. Run Acrobat-user walkthroughs on core tasks: open, navigate, annotate, redact, secure, export
+
+###### Validation Questions
+
+- Can an Acrobat user find thumbnails, zoom, page navigation, and export without training?
+- Does the right pane feel like the natural place for advanced tasks?
+- Is the top command area cleaner than Acrobat while still feeling familiar?
+- Does the document remain visually dominant over the chrome?
+- At 1280px wide, does the shell still look intentional rather than compressed?
+
+##### Recommended Execution Order
+
+| Order | Workstream | Why It Comes First | Exit Criteria |
+|---|---|---|---|
+| 1 | Viewer truthfulness | If annotation tools are visible but not actually attached to the viewer, the app is misrepresenting its core capability | Annotation tools draw/edit on the page surface, export sees the same state, and the toolbar only shows tools that work |
+| 2 | Feature reachability | Hidden but implemented features create parity confusion and failed QA | Every shipped feature is reachable from visible UI or intentionally hidden behind a documented defer decision |
+| 3 | Welcome/recent files cleanup | This is the first-run experience and currently affects both usability and accessibility | One recent-files surface exists, remove actions are valid, and open/remove behavior is deterministic |
+| 4 | Modal and focus consistency | Accessibility and keyboard reliability break down if dialogs use different patterns | All dialogs use one accessible modal pattern with Escape, focus trap, and focus restore |
+| 5 | Responsive shell and toolbar layout | Overflowing controls make later QA noisy and hide bugs behind layout breakage | Main toolbar works cleanly at target desktop widths without clipping or overlapping controls |
+| 6 | Navigation honesty | Dead tabs and misleading onboarding create false expectations | Outline and onboarding only appear when backed by real data or a deliberate disabled state |
+| 7 | Token and shortcut contract cleanup | Final consistency pass after structural UI fixes land | Visual states and shortcut help match the actual product behavior |
+
+##### Work Breakdown
+
+| Workstream | Concrete Fixes | Dependencies | Required Validation |
+|---|---|---|---|
+| 1. Viewer truthfulness | Wire `AnnotationCanvas` into the live page rendering path, verify Fabric state and exported annotation payload are the same source of truth, hide or disable any annotation tool that is not fully wired, and confirm the property panel only appears for supported active tools | Viewer shell, annotation store, export path | Component tests for toolbar + property panel, integration test for annotate -> export -> reopen, manual QA for draw/highlight/text/shape/stamp/redact |
+| 2. Feature reachability | Add visible entry points for comparison, security, and annotation report, or hide those features until they are fully supported; create one authoritative place for advanced tools instead of leaving modal-only islands in `App.tsx` | Stable modal routing and shell layout | Component tests proving buttons/menu items open the correct dialogs, manual QA that each shipped feature can be reached in <= 2 interactions |
+| 3. Welcome/recent files cleanup | Consolidate recent files into a single component, remove duplicate rendering on the welcome screen, replace nested button markup with valid structure, and ensure remove/open actions have independent hit targets and keyboard behavior | Session store, welcome screen | React Testing Library coverage for open/remove/empty states, manual keyboard-only test, no nested interactive controls in rendered DOM |
+| 4. Modal and focus consistency | Migrate comparison, security, and annotation report to the shared modal system or upgrade the shared modal so it can support all required layouts; standardize close button placement, Escape handling, backdrop behavior, focus trap, and focus restoration | Shared modal primitives | Accessibility tests for Escape and focus return, manual tab-order test, axe pass for open dialogs |
+| 5. Responsive shell and toolbar layout | Replace the single overloaded top bar with a layout that survives common desktop widths, likely through grouped tool sections, overflow menus, or a second command row; add explicit width targets for 1280px, 1440px, and maximized windows | Entry-point decisions from workstream 2 | Manual resize matrix, screenshots or visual regression checks at target widths, no hidden critical actions without discoverable overflow access |
+| 6. Navigation honesty | Hide or disable the outline tab until real outline data exists, or complete outline extraction and navigation; retarget onboarding so each step appears only when its referenced UI is visible; do not point tours at missing panels | Viewer sidebar behavior, session preference store | Manual QA for pages/outline toggle, onboarding pass from clean profile, no onboarding step without a real target |
+| 7. Token and shortcut contract cleanup | Audit CSS variables and remove undefined token usage, normalize hover/focus/active colors, and reconcile the shortcut catalog with actual bindings so help text only lists working shortcuts | Prior UI surfaces stabilized | Grep-based token audit, shortcut inventory review, manual verification of listed shortcuts |
+| 8. Acrobat-familiar shell refresh | Rework the app frame so command rows, left navigation, central viewer, and right task pane match Acrobat-trained user expectations while staying modern and lighter | Workstreams 2, 4, 5, and 7 substantially complete | Pilot walkthroughs with Acrobat users succeed for open, navigate, annotate, secure, and export without coaching |
+
+##### Strict Rules for This UI Pass
+
+- No visible control may exist without a working handler and a QA row
+- No implemented feature may remain modal-only and unreachable from the product shell
+- No duplicate workflows are allowed in the same screen unless they serve different user intent
+- No dialog may bypass the shared accessibility pattern without written justification
+- No shortcut may appear in help text or onboarding unless it is actually bound
+- No tab, panel, or tooltip may advertise data that is always empty
+
+##### TDD Expectations for UI Remediation
+
+Each UI remediation task should follow test-first implementation:
+- Add or update the failing component/integration test first
+- Land the smallest code change that makes the new behavior pass
+- Add manual QA notes for keyboard, mouse, and resize behavior
+- Do not mark a UI task complete if it only "looks fixed" without interaction coverage
+
+##### Suggested Delivery Slices
+
+1. Annotation wiring + export verification
+2. Reachability pass for comparison/security/report
+3. Welcome/recent files consolidation
+4. Modal unification
+5. Toolbar/shell responsive pass
+6. Outline/onboarding honesty pass
+7. Token/shortcut cleanup and final UI regression sweep
+8. Acrobat-familiar visual polish and pilot validation
+
+##### UI Exit Criteria
+
+Before Stage 7 or any "polish complete" claim:
+- Annotation tools visible in the toolbar are fully functional on the live viewer
+- Comparison, security, and annotation report are either reachable from the UI or intentionally removed from scope
+- The welcome screen has exactly one recent-files experience
+- No nested interactive controls remain in the main shell or welcome flows
+- All shipped dialogs follow one accessibility contract for focus and close behavior
+- The shell remains usable at 1280px wide without clipped primary actions
+- Outline and onboarding only reference visible, real functionality
+- Design tokens and shortcut documentation match the actual implementation
+- The final shell follows the Acrobat-familiar layout blueprint without becoming a legacy visual clone
+
 ### Phase 4: Polish and Parity (Weeks 17-20)
 
 | Week | Feature | Frontend Work | Backend Work |
@@ -560,6 +736,19 @@ Before Stage 7 starts, the team must produce:
 | 20 | Recent files | Recent files panel (app data storage) | -- |
 | 20 | Export to images | Image export dialog | `/api/export/{sid}/images` |
 | 20 | **Final QA + acceptance testing** | Full feature parity checklist | Performance + load testing |
+
+---
+
+### Delivered Post-Parity Utility Expansion
+
+The original four-phase roadmap has now been extended in the live codebase with a completed utility slice that was previously tracked in [COMMON-PDF-EDITOR-BACKLOG.md](COMMON-PDF-EDITOR-BACKLOG.md) as `Phase 7: Document Utility Expansion`.
+
+- `Create PDF from images` is implemented through the welcome-screen flow and backend route `/api/documents/from-images`
+- `Compress / optimize / reduce file size` is implemented through the editor toolbar and backend route `/api/documents/{sid}/optimize`
+- `Attachment panel` is implemented through the left-sidebar `Files` tab and `/api/attachments/{sid}` endpoints
+- Backend coverage was added for generated sessions, create-from-images, optimize, merge-saveability, and attachment CRUD flows
+
+For planning purposes, this utility expansion should be treated as complete. Any future work in this area is polish, not a missing core feature.
 
 ---
 
@@ -1101,6 +1290,12 @@ These files contain logic that transfers directly or with minimal modification:
 - [ ] All Phase 1-3 user-facing buttons and menu actions have been verified against a manual QA matrix
 - [ ] Every completed core feature has automated coverage at the appropriate layer
 - [ ] Frontend tests cover critical UI behavior, not only rendering
+- [ ] Toolbar-visible annotation tools are wired to the live viewer surface and verified end-to-end
+- [ ] All shipped features are reachable from visible UI entry points or intentionally hidden from scope
+- [ ] Welcome/recent-files flows have no duplicate surfaces or nested interactive controls
+- [ ] All shipped dialogs follow the shared modal accessibility contract
+- [ ] Main shell layout is verified at target desktop widths with no clipped primary actions
+- [ ] Onboarding, outline, shortcut help, and visible navigation only reference working functionality
 - [ ] Backend tests cover document mutation, session lifecycle, and output correctness
 - [ ] Exported PDF fixtures are verified against known-good results
 - [ ] Crash recovery is tested by force-closing the app during unsaved work

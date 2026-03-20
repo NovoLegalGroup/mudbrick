@@ -29,6 +29,9 @@ Legend: Pass / Fail / N/A / Blocked
 | 1.12 | Undo (Ctrl+Z) after page operation | | |
 | 1.13 | Redo (Ctrl+Shift+Z) after undo | | |
 | 1.14 | Multiple undo steps (5+) | | |
+| 1.15 | Create PDF from images via welcome screen flow | | |
+| 1.16 | Save As works for generated PDF-from-images document | | |
+| 1.17 | Save As works for generated merged document with no original source path | | |
 
 ## 2. Viewer
 
@@ -102,6 +105,19 @@ Legend: Pass / Fail / N/A / Blocked
 | 5.3 | Export save dialog works | | |
 | 5.4 | Exported PDF is valid (opens in other readers) | | |
 | 5.5 | Export page as image (PNG) | | |
+| 5.6 | Optimize PDF reduces file size when reduction is available | | |
+| 5.7 | Optimize PDF shows informative no-op result when no reduction is available | | |
+
+## 5A. Embedded Files
+
+| # | Test Case | Result | Notes |
+|---|-----------|--------|-------|
+| 5A.1 | `Files` tab is visible and opens attachment panel | | |
+| 5A.2 | Add attachment to current PDF | | |
+| 5A.3 | Export attachment via Save As | | |
+| 5A.4 | Remove attachment from current PDF | | |
+| 5A.5 | Save/re-open preserves embedded attachments | | |
+| 5A.6 | Attachments work on generated PDFs (created from images / merged docs) | | |
 
 ## 6. OCR
 

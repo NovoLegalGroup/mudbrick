@@ -53,9 +53,11 @@ doc.close()
 | Open PDF | small.pdf | < 1s | | | | | |
 | Open PDF | medium.pdf (50pg) | < 3s | | | | | |
 | Open PDF | large.pdf (100MB+) | < 5s | | | | | |
+| Create PDF from 10 images | image set | < 5s | | | | | |
 | Save PDF | small.pdf | < 1s | | | | | |
 | Save PDF | large.pdf (100MB+) | < 3s | | | | | |
 | Save As (new path) | medium.pdf | < 2s | | | | | |
+| First Save As on generated image PDF | generated-from-images.pdf | < 2s | | | | | |
 
 ## Navigation
 
@@ -87,6 +89,15 @@ doc.close()
 | Export with 10 annotations | medium.pdf | < 5s | | | | | |
 | Export with annotations | large.pdf (100pg) | < 10s | | | | | |
 | Export page as PNG | single page | < 1s | | | | | |
+
+## Document Utilities
+
+| Metric | File | Target | Run 1 | Run 2 | Run 3 | Median | Pass? |
+|--------|------|--------|-------|-------|-------|--------|-------|
+| Optimize PDF | medium.pdf | < 3s | | | | | |
+| Add 5 MB attachment | medium.pdf | < 2s | | | | | |
+| Export 5 MB attachment | medium.pdf | < 1s | | | | | |
+| Remove attachment | medium.pdf | < 1s | | | | | |
 
 ## OCR
 
