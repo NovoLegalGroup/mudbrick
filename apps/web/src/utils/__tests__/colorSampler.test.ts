@@ -23,16 +23,33 @@ function createMockCanvas(
   Object.defineProperty(canvas, 'offsetWidth', { value: width });
   canvas.style.width = `${width}px`;
 
-  if (pixelData) {
-    const ctx = canvas.getContext('2d')!;
-    const originalGetImageData = ctx.getImageData.bind(ctx);
-    vi.spyOn(ctx, 'getImageData').mockReturnValue({
-      data: pixelData,
+  const context = {
+    canvas,
+    getImageData: vi.fn().mockReturnValue({
+      data: pixelData ?? new Uint8ClampedArray(width * height * 4),
       width,
       height,
       colorSpace: 'srgb',
-    } as ImageData);
-  }
+    } as ImageData),
+    putImageData: vi.fn(),
+    clearRect: vi.fn(),
+    drawImage: vi.fn(),
+    fillRect: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    translate: vi.fn(),
+    scale: vi.fn(),
+    setTransform: vi.fn(),
+  };
+
+  Object.defineProperty(canvas, 'getContext', {
+    configurable: true,
+    value: vi.fn().mockReturnValue(context),
+  });
 
   return canvas;
 }

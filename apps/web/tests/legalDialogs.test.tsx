@@ -90,7 +90,7 @@ describe('Phase 3 legal dialogs', () => {
       target: { value: 'CONFIDENTIAL' },
     });
 
-    expect(screen.getByText('CONFIDENTIAL')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('CONFIDENTIAL')).toBeInTheDocument();
     expect(screen.getAllByText('1/3').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: 'Apply Headers/Footers' }));

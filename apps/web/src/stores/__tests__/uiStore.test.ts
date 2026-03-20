@@ -35,6 +35,11 @@ describe('uiStore', () => {
       useUIStore.getState().setSidebarTab('outline');
       expect(useUIStore.getState().sidebarTab).toBe('outline');
     });
+
+    it('supports the attachments tab', () => {
+      useUIStore.getState().setSidebarTab('attachments');
+      expect(useUIStore.getState().sidebarTab).toBe('attachments');
+    });
   });
 
   describe('panels', () => {
