@@ -7,11 +7,15 @@ No HTTP upload -- backend reads files directly from disk.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..dependencies import get_session_manager
 from ..models.document import (
+    CreateFromImagesRequest,
     OpenFileRequest,
+    OptimizeResponse,
     SaveRequest,
     SaveResponse,
     SessionCreateResponse,
@@ -50,6 +54,50 @@ async def open_document(
         sm.close_session(meta.session_id)
         raise HTTPException(status_code=400, detail=f"Cannot open PDF: {str(e)}")
 
+    meta = sm.update_metadata(meta.session_id, page_count=page_count)
+
+    return SessionCreateResponse(
+        session_id=meta.session_id,
+        page_count=page_count,
+        file_size=meta.file_size,
+    )
+
+
+@router.post("/from-images", response_model=SessionCreateResponse)
+async def create_document_from_images(
+    request: CreateFromImagesRequest,
+    sm: SessionManager = Depends(get_session_manager),
+):
+    """Create a new PDF session from one or more image files."""
+    if not request.file_paths:
+        raise HTTPException(status_code=400, detail="At least 1 image file is required")
+
+    doc = None
+    try:
+        doc = PdfEngine.create_pdf_from_images(request.file_paths)
+        page_count = doc.page_count
+        pdf_bytes = PdfEngine.save_to_bytes(doc)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot create PDF from images: {str(e)}")
+    finally:
+        if doc is not None:
+            doc.close()
+
+    first_stem = Path(request.file_paths[0]).stem or "images"
+    file_name = (
+        f"{first_stem}.pdf"
+        if len(request.file_paths) == 1
+        else f"{first_stem}_images.pdf"
+    )
+    meta = sm.create_session_from_bytes(
+        file_name=file_name,
+        pdf_bytes=pdf_bytes,
+        operation="create from images",
+    )
     meta = sm.update_metadata(meta.session_id, page_count=page_count)
 
     return SessionCreateResponse(
@@ -154,6 +202,55 @@ async def close_document(
 
     sm.close_session(sid)
     return {"success": True}
+
+
+@router.post("/{sid}/optimize", response_model=OptimizeResponse)
+async def optimize_document(
+    sid: str,
+    sm: SessionManager = Depends(get_session_manager),
+):
+    """Optimize the current PDF for smaller file size when possible."""
+    meta = sm.get_session(sid)
+    if meta is None:
+        raise HTTPException(status_code=404, detail=f"Session not found: {sid}")
+
+    pdf_bytes = sm.get_current_pdf_bytes(sid)
+    if pdf_bytes is None:
+        raise HTTPException(status_code=404, detail=f"Session not found: {sid}")
+
+    doc = None
+    try:
+        doc = PdfEngine.open_from_bytes(pdf_bytes)
+        optimized_bytes = PdfEngine.optimize_for_size(doc)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Optimization failed: {str(e)}")
+    finally:
+        if doc is not None:
+            doc.close()
+
+    original_size = len(pdf_bytes)
+    optimized_size = len(optimized_bytes)
+    bytes_saved = max(0, original_size - optimized_size)
+
+    if bytes_saved > 0:
+        new_version = sm.save_current_pdf(sid, optimized_bytes, "optimize pdf")
+        return OptimizeResponse(
+            optimized=True,
+            page_count=meta.page_count,
+            original_size=original_size,
+            optimized_size=optimized_size,
+            bytes_saved=bytes_saved,
+            new_version=new_version,
+        )
+
+    return OptimizeResponse(
+        optimized=False,
+        page_count=meta.page_count,
+        original_size=original_size,
+        optimized_size=original_size,
+        bytes_saved=0,
+        new_version=None,
+    )
 
 
 @router.post("/{sid}/undo", response_model=UndoRedoResponse)

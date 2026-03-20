@@ -7,8 +7,7 @@ No HTTP upload -- backend reads files directly from disk.
 
 from __future__ import annotations
 
-import os
-import tempfile
+from pathlib import Path
 
 import fitz
 from fastapi import APIRouter, Depends, HTTPException
@@ -47,8 +46,14 @@ async def merge_documents(
     docs: list[fitz.Document] = []
     try:
         for fp in request.file_paths:
+            source = Path(fp)
+            if not source.exists():
+                raise HTTPException(status_code=404, detail=f"File not found: {fp}")
+            if not source.is_file():
+                raise HTTPException(status_code=400, detail=f"Not a file: {fp}")
+
             try:
-                doc = PdfEngine.open_from_file(fp)
+                doc = PdfEngine.open_from_file(str(source))
                 docs.append(doc)
             except FileNotFoundError:
                 raise HTTPException(status_code=404, detail=f"File not found: {fp}")
@@ -64,21 +69,13 @@ async def merge_documents(
         for doc in docs:
             doc.close()
 
-    # Create a new session -- write merged bytes to temp file, then open
-    names = [os.path.splitext(os.path.basename(fp))[0] for fp in request.file_paths[:3]]
+    names = [Path(fp).stem for fp in request.file_paths[:3]]
     merged_name = f"merged_{'_'.join(names)}.pdf"
-
-    temp_path = os.path.join(tempfile.gettempdir(), f"mudbrick_merge_{merged_name}")
-    with open(temp_path, "wb") as f:
-        f.write(merged_bytes)
-
-    try:
-        meta = sm.open_file(temp_path)
-        sm.update_metadata(meta.session_id, page_count=page_count, file_name=merged_name)
-    finally:
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
+    meta = sm.create_session_from_bytes(
+        file_name=merged_name,
+        pdf_bytes=merged_bytes,
+        operation="merge documents",
+    )
+    sm.update_metadata(meta.session_id, page_count=page_count)
 
     return MergeResponse(session_id=meta.session_id, page_count=page_count)

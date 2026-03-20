@@ -60,8 +60,9 @@ class ComparisonResult:
     summary: ComparisonSummary = field(default_factory=ComparisonSummary)
 
 
-# Pixel difference threshold: mean diff above this = modified page
-_DIFF_THRESHOLD = 0.02  # 2% mean pixel difference
+# Pixel difference threshold: compare using both mean and RMS so sparse text
+# edits still register as modified pages.
+_DIFF_THRESHOLD = 0.01
 
 
 def _render_page_to_pil(doc: fitz.Document, page_idx: int, dpi: int = 150) -> "Image.Image":
@@ -81,15 +82,19 @@ def _compute_diff_score(img1: "Image.Image", img2: "Image.Image") -> tuple[float
     diff = ImageChops.difference(img1, img2)
     stat = ImageStat.Stat(diff)
 
-    # Mean across R, G, B channels normalized to 0-1
+    # Mean and RMS across R, G, B channels normalized to 0-1. Mean alone is
+    # too forgiving for sparse edits like single-line text changes on a mostly
+    # white page, so we keep the more sensitive of the two.
     mean_diff = sum(stat.mean) / (3 * 255.0)
+    rms_diff = sum(stat.rms) / (3 * 255.0)
+    diff_score = max(mean_diff, rms_diff)
 
     # Encode diff image as PNG
     buf = io.BytesIO()
     diff.save(buf, format="PNG")
     diff_bytes = buf.getvalue()
 
-    return mean_diff, diff_bytes
+    return diff_score, diff_bytes
 
 
 def compare_documents(

@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import fitz
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -61,6 +62,36 @@ class ExportImagesResponse(BaseModel):
     file_paths: list[str]
 
 
+class FlattenAnnotationsResponse(BaseModel):
+    success: bool = True
+    page_count: int
+    new_version: int
+
+
+def _render_annotations(
+    doc: fitz.Document,
+    annotations: dict[str, AnnotationSet],
+    options: dict[str, Any],
+) -> None:
+    """Render Fabric.js annotations onto the provided document pages."""
+    for page_str, annotation_set in annotations.items():
+        page_num = int(page_str) - 1  # Convert to 0-indexed
+        if page_num < 0 or page_num >= doc.page_count:
+            continue
+
+        page = doc[page_num]
+        objects = annotation_set.objects
+
+        if not objects:
+            continue
+
+        # Determine the CSS pixel dimensions the annotations were drawn at
+        page_width = options.get("page_width", page.rect.width)
+        page_height = options.get("page_height", page.rect.height)
+
+        render_annotations_to_page(page, objects, page_width, page_height)
+
+
 @router.post("/{sid}", response_model=ExportResponse)
 async def export_document(
     sid: str,
@@ -79,23 +110,7 @@ async def export_document(
 
     doc = PdfEngine.open_from_file(str(pdf_path))
     try:
-        for page_str, annotation_set in request.annotations.items():
-            page_num = int(page_str) - 1  # Convert to 0-indexed
-            if page_num < 0 or page_num >= doc.page_count:
-                continue
-
-            page = doc[page_num]
-            objects = annotation_set.objects
-
-            if not objects:
-                continue
-
-            # Determine the CSS pixel dimensions the annotations were drawn at
-            page_width = request.options.get("page_width", page.rect.width)
-            page_height = request.options.get("page_height", page.rect.height)
-
-            render_annotations_to_page(page, objects, page_width, page_height)
-
+        _render_annotations(doc, request.annotations, request.options)
         export_bytes = PdfEngine.save_to_bytes(doc)
     finally:
         doc.close()
@@ -115,6 +130,31 @@ async def export_document(
         file_path = meta.file_path if meta else ""
 
     return ExportResponse(file_path=file_path)
+
+
+@router.post("/{sid}/flatten", response_model=FlattenAnnotationsResponse)
+async def flatten_annotations_into_document(
+    sid: str,
+    request: ExportRequest,
+    sm: SessionManager = Depends(get_session_manager),
+):
+    """Flatten annotations into the current session document as a new version."""
+    pdf_path = sm.get_current_pdf_path(sid)
+    if pdf_path is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    doc = PdfEngine.open_from_file(str(pdf_path))
+    try:
+        _render_annotations(doc, request.annotations, request.options)
+        flattened_bytes = PdfEngine.save_to_bytes(doc)
+        page_count = doc.page_count
+    finally:
+        doc.close()
+
+    new_version = sm.save_current_pdf(sid, flattened_bytes, "flatten annotations")
+    sm.update_metadata(sid, page_count=page_count)
+
+    return FlattenAnnotationsResponse(page_count=page_count, new_version=new_version)
 
 
 @router.post("/{sid}/images", response_model=ExportImagesResponse)

@@ -120,6 +120,40 @@ class SessionManager:
         self._save_metadata(sid, meta)
         return meta
 
+    def create_session_from_bytes(
+        self,
+        file_name: str,
+        pdf_bytes: bytes,
+        *,
+        file_path: str = "",
+        operation: str = "create",
+    ) -> SessionMetadata:
+        """Create a new editing session from PDF bytes already in memory."""
+        sid = uuid.uuid4().hex[:12]
+        session_dir = self._session_dir(sid)
+        session_dir.mkdir(parents=True)
+        self._versions_dir(sid).mkdir()
+        self._thumbnails_dir(sid).mkdir()
+
+        self._current_pdf_path(sid).write_bytes(pdf_bytes)
+        self._version_pdf_path(sid, 1).write_bytes(pdf_bytes)
+
+        resolved_name = file_name or Path(file_path).name or "document.pdf"
+        meta = SessionMetadata(
+            session_id=sid,
+            file_path=file_path,
+            file_name=resolved_name,
+            file_size=len(pdf_bytes),
+            current_version=1,
+            oldest_version=1,
+            max_version=1,
+            operations=[
+                OperationRecord(version=1, operation=operation),
+            ],
+        )
+        self._save_metadata(sid, meta)
+        return meta
+
     # ── Session Queries ──
 
     def get_session(self, sid: str) -> Optional[SessionMetadata]:

@@ -52,6 +52,12 @@ class OpenFileRequest(BaseModel):
     file_path: str
 
 
+class CreateFromImagesRequest(BaseModel):
+    """Request to create a PDF document from image file paths."""
+
+    file_paths: list[str]
+
+
 class SessionCreateResponse(BaseModel):
     """Response from opening a file."""
 
@@ -85,6 +91,18 @@ class SaveResponse(BaseModel):
 
     success: bool = True
     file_path: str
+
+
+class OptimizeResponse(BaseModel):
+    """Response from PDF optimization."""
+
+    success: bool = True
+    optimized: bool
+    page_count: int
+    original_size: int
+    optimized_size: int
+    bytes_saved: int
+    new_version: Optional[int] = None
 
 
 class UndoRedoResponse(BaseModel):

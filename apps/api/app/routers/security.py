@@ -6,7 +6,6 @@ PDF encryption (AES-256 via pikepdf), metadata management, and sanitization.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional
 
 import fitz  # PyMuPDF
@@ -106,7 +105,7 @@ async def encrypt_document(
             accessibility=True,  # Always allow accessibility
         )
 
-        pdf = pikepdf.open(str(pdf_path))
+        pdf = pikepdf.open(str(pdf_path), allow_overwriting_input=True)
         pdf.save(
             str(pdf_path),
             encryption=pikepdf.Encryption(

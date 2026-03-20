@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .dependencies import get_session_manager
 from .routers import (
+    attachments,
     bates,
     compare,
     documents,
@@ -67,6 +68,7 @@ app.add_middleware(
 
 # Register routers
 app.include_router(documents.router)
+app.include_router(attachments.router)
 app.include_router(pages.router)
 app.include_router(merge.router)
 app.include_router(thumbnails.router)

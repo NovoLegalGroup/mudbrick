@@ -213,7 +213,7 @@ async def flatten_form(
 @router.get("/{sid}/export")
 async def export_form_data(
     sid: str,
-    format: str = Query(default="json", regex="^(json)$"),
+    format: str = Query(default="json", pattern="^(json)$"),
     sm: SessionManager = Depends(get_session_manager),
 ):
     """Export form field data as JSON."""

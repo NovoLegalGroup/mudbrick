@@ -9,9 +9,16 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
-from typing import Optional
+from pathlib import Path
 
 import fitz  # PyMuPDF
+
+try:
+    from PIL import Image, ImageFile, ImageOps
+except ImportError:
+    Image = None  # type: ignore[assignment]
+    ImageFile = None  # type: ignore[assignment]
+    ImageOps = None  # type: ignore[assignment]
 
 
 @dataclass
@@ -219,6 +226,134 @@ class PdfEngine:
         for doc in docs:
             result.insert_pdf(doc)
         return result
+
+    @staticmethod
+    def duplicate_pages(doc: fitz.Document, page_numbers: list[int]) -> fitz.Document:
+        """Return a new document with the specified 0-indexed pages duplicated in place."""
+        duplicate_set = set(page_numbers)
+        result = fitz.open()
+        for index in range(doc.page_count):
+            result.insert_pdf(doc, from_page=index, to_page=index)
+            if index in duplicate_set:
+                result.insert_pdf(doc, from_page=index, to_page=index)
+        return result
+
+    @staticmethod
+    def insert_pages(
+        doc: fitz.Document,
+        source_doc: fitz.Document,
+        *,
+        after: int,
+        source_pages: list[int] | None = None,
+    ) -> fitz.Document:
+        """Return a new document with source pages inserted after the given 0-indexed page."""
+        result = fitz.open()
+
+        if after >= 0:
+            result.insert_pdf(doc, from_page=0, to_page=after)
+
+        if source_pages:
+            for page_num in source_pages:
+                result.insert_pdf(source_doc, from_page=page_num, to_page=page_num)
+        else:
+            result.insert_pdf(source_doc)
+
+        if after + 1 < doc.page_count:
+            result.insert_pdf(doc, from_page=after + 1, to_page=doc.page_count - 1)
+
+        return result
+
+    @staticmethod
+    def replace_page(
+        doc: fitz.Document,
+        page_num: int,
+        replacement_doc: fitz.Document,
+        *,
+        replacement_page: int = 0,
+    ) -> fitz.Document:
+        """Return a new document with one 0-indexed page replaced by another document page."""
+        result = fitz.open()
+
+        if page_num > 0:
+            result.insert_pdf(doc, from_page=0, to_page=page_num - 1)
+
+        result.insert_pdf(replacement_doc, from_page=replacement_page, to_page=replacement_page)
+
+        if page_num + 1 < doc.page_count:
+            result.insert_pdf(doc, from_page=page_num + 1, to_page=doc.page_count - 1)
+
+        return result
+
+    @staticmethod
+    def image_file_to_pdf(path: str) -> fitz.Document:
+        """Convert a standalone image file into a single-page PDF document."""
+        if Image is None or ImageFile is None or ImageOps is None:
+            image_doc = fitz.open(path)
+            try:
+                pdf_bytes = image_doc.convert_to_pdf()
+            finally:
+                image_doc.close()
+            return fitz.open(stream=pdf_bytes, filetype="pdf")
+
+        previous_flag = ImageFile.LOAD_TRUNCATED_IMAGES
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+        try:
+            with Image.open(path) as source:
+                prepared = ImageOps.exif_transpose(source)
+
+                if "A" in prepared.getbands():
+                    rgba = prepared.convert("RGBA")
+                    flattened = Image.new("RGB", rgba.size, (255, 255, 255))
+                    flattened.paste(rgba, mask=rgba.getchannel("A"))
+                    prepared = flattened
+                else:
+                    prepared = prepared.convert("RGB")
+
+                dpi_x, dpi_y = source.info.get("dpi", (72, 72))
+                dpi_x = dpi_x or 72
+                dpi_y = dpi_y or 72
+                width_pts = prepared.width * 72.0 / dpi_x
+                height_pts = prepared.height * 72.0 / dpi_y
+
+                image_buffer = io.BytesIO()
+                prepared.save(image_buffer, format="PNG")
+        finally:
+            ImageFile.LOAD_TRUNCATED_IMAGES = previous_flag
+
+        result = fitz.open()
+        page = result.new_page(width=width_pts, height=height_pts)
+        page.insert_image(page.rect, stream=image_buffer.getvalue())
+        return result
+
+    @staticmethod
+    def create_pdf_from_images(image_paths: list[str]) -> fitz.Document:
+        """Convert one or more image files into a multi-page PDF."""
+        if not image_paths:
+            raise ValueError("At least 1 image file is required")
+
+        result = fitz.open()
+        temp_docs: list[fitz.Document] = []
+        try:
+            for path in image_paths:
+                image_path = Path(path)
+                if not image_path.exists():
+                    raise FileNotFoundError(f"File not found: {path}")
+                if not image_path.is_file():
+                    raise ValueError(f"Not a file: {path}")
+
+                image_pdf = PdfEngine.image_file_to_pdf(str(image_path))
+                temp_docs.append(image_pdf)
+                result.insert_pdf(image_pdf)
+        finally:
+            for temp_doc in temp_docs:
+                temp_doc.close()
+
+        return result
+
+    @staticmethod
+    def optimize_for_size(doc: fitz.Document) -> bytes:
+        """Rewrite the document with the most aggressive safe compaction settings."""
+        return PdfEngine.save_to_bytes(doc, garbage=4, deflate=True)
 
     @staticmethod
     def crop_page(
