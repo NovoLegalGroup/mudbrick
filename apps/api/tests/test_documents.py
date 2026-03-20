@@ -4,6 +4,7 @@ Mudbrick v2 -- Tests for Document Router (Desktop / File-Path Based)
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 import fitz
@@ -25,6 +26,19 @@ def valid_pdf_file(tmp_path: Path) -> Path:
     doc.save(str(pdf_path))
     doc.close()
     return pdf_path
+
+
+@pytest.fixture
+def image_files(tmp_path: Path) -> list[Path]:
+    """Create two tiny PNG files for create-from-images tests."""
+    png_bytes = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1cAAAAASUVORK5CYII="
+    )
+    first = tmp_path / "first.png"
+    second = tmp_path / "second.png"
+    first.write_bytes(png_bytes)
+    second.write_bytes(png_bytes)
+    return [first, second]
 
 
 @pytest.fixture
@@ -64,6 +78,26 @@ class TestDocumentOpen:
         response = await doc_client.post(
             "/api/documents/open",
             json={"file_path": "C:/nonexistent/fake.pdf"},
+        )
+        assert response.status_code == 404
+
+    async def test_create_pdf_from_images(
+        self, doc_client: AsyncClient, image_files: list[Path]
+    ):
+        response = await doc_client.post(
+            "/api/documents/from-images",
+            json={"file_paths": [str(path) for path in image_files]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "session_id" in data
+        assert data["page_count"] == 2
+        assert data["file_size"] > 0
+
+    async def test_create_pdf_from_images_missing_file(self, doc_client: AsyncClient):
+        response = await doc_client.post(
+            "/api/documents/from-images",
+            json={"file_paths": ["C:/nonexistent/missing.png"]},
         )
         assert response.status_code == 404
 
@@ -121,6 +155,23 @@ class TestDocumentOperations:
         data = response.json()
         assert data["success"] is True
         assert data["file_path"] == str(valid_pdf_file)
+
+    async def test_optimize_document(
+        self, doc_client: AsyncClient, valid_pdf_file: Path
+    ):
+        open_resp = await doc_client.post(
+            "/api/documents/open",
+            json={"file_path": str(valid_pdf_file)},
+        )
+        sid = open_resp.json()["session_id"]
+
+        response = await doc_client.post(f"/api/documents/{sid}/optimize")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["original_size"] >= data["optimized_size"]
+        assert data["bytes_saved"] == data["original_size"] - data["optimized_size"]
+        assert data["page_count"] == 1
 
     async def test_save_as(
         self, doc_client: AsyncClient, valid_pdf_file: Path, tmp_path: Path

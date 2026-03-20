@@ -8,67 +8,46 @@ from pathlib import Path
 
 import fitz
 import pytest
-from httpx import ASGITransport, AsyncClient
-
-from app.main import app
-from app.dependencies import get_session_manager
-from app.services.session_manager import SessionManager
-from app.services.adapters.local_storage import LocalBlobAdapter
-from app.services.adapters.local_kv import LocalKVAdapter
+from httpx import AsyncClient
 
 
-@pytest.fixture
-def test_session_mgr(tmp_data_dir: Path) -> SessionManager:
-    blob = LocalBlobAdapter(str(tmp_data_dir))
-    kv = LocalKVAdapter(str(tmp_data_dir))
-    return SessionManager(blob=blob, kv=kv)
-
-
-@pytest.fixture
-async def export_client(test_session_mgr: SessionManager):
-    app.dependency_overrides[get_session_manager] = lambda: test_session_mgr
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        yield c
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture
-def test_pdf() -> bytes:
-    doc = fitz.open()
-    page = doc.new_page(width=612, height=792)
-    page.insert_text((72, 72), "Test document for export", fontsize=16)
-    data = doc.tobytes()
-    doc.close()
-    return data
-
-
-async def create_session(client: AsyncClient, pdf_bytes: bytes) -> str:
-    resp = await client.post(
-        "/api/documents/upload",
-        files={"file": ("test.pdf", pdf_bytes, "application/pdf")},
+async def open_file(client: AsyncClient, file_path: Path) -> str:
+    response = await client.post(
+        "/api/documents/open",
+        json={"file_path": str(file_path)},
     )
-    return resp.json()["session_id"]
+    assert response.status_code == 200
+    return response.json()["session_id"]
 
 
 @pytest.mark.asyncio
 class TestExport:
     async def test_export_no_annotations(
-        self, export_client: AsyncClient, test_pdf: bytes
+        self,
+        client: AsyncClient,
+        sample_pdf_file: Path,
     ):
-        sid = await create_session(export_client, test_pdf)
-        resp = await export_client.post(
+        sid = await open_file(client, sample_pdf_file)
+        response = await client.post(
             f"/api/export/{sid}",
             json={"annotations": {}, "options": {}},
         )
-        assert resp.status_code == 200
-        assert "download_url" in resp.json()
 
-    async def test_export_with_annotations(
-        self, export_client: AsyncClient, test_pdf: bytes
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["success"] is True
+        assert payload["file_path"] == str(sample_pdf_file)
+
+    async def test_export_with_annotations_to_output_path(
+        self,
+        client: AsyncClient,
+        sample_pdf_file: Path,
+        tmp_path: Path,
     ):
-        sid = await create_session(export_client, test_pdf)
-        resp = await export_client.post(
+        sid = await open_file(client, sample_pdf_file)
+        output_path = tmp_path / "exported.pdf"
+
+        response = await client.post(
             f"/api/export/{sid}",
             json={
                 "annotations": {
@@ -106,23 +85,24 @@ class TestExport:
                         ],
                     }
                 },
+                "output_path": str(output_path),
                 "options": {"page_width": 612, "page_height": 792},
             },
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "download_url" in data
 
-        # Verify the exported PDF is valid
-        download_resp = await export_client.get(data["download_url"])
-        assert download_resp.status_code == 200
-        exported = fitz.open(stream=download_resp.content, filetype="pdf")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["success"] is True
+        assert payload["file_path"] == str(output_path)
+        assert output_path.exists()
+
+        exported = fitz.open(str(output_path))
         assert exported.page_count == 1
         exported.close()
 
-    async def test_export_nonexistent_session(self, export_client: AsyncClient):
-        resp = await export_client.post(
+    async def test_export_nonexistent_session(self, client: AsyncClient):
+        response = await client.post(
             "/api/export/nonexistent",
             json={"annotations": {}, "options": {}},
         )
-        assert resp.status_code == 404
+        assert response.status_code == 404

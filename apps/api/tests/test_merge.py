@@ -102,3 +102,22 @@ async def test_merge_creates_valid_session(merge_client: AsyncClient, merge_sess
     info_resp = await merge_client.get(f"/api/documents/{sid}")
     assert info_resp.status_code == 200
     assert info_resp.json()["page_count"] == 4
+
+
+@pytest.mark.asyncio
+async def test_merge_session_can_save_as(merge_client: AsyncClient, tmp_path: Path):
+    pdf1 = _create_pdf(tmp_path, "save-a.pdf", 1)
+    pdf2 = _create_pdf(tmp_path, "save-b.pdf", 1)
+
+    merge_resp = await merge_client.post("/api/merge", json={
+        "file_paths": [str(pdf1), str(pdf2)],
+    })
+    sid = merge_resp.json()["session_id"]
+
+    output_path = tmp_path / "merged-output.pdf"
+    save_resp = await merge_client.post(
+        f"/api/documents/{sid}/save-as",
+        json={"file_path": str(output_path)},
+    )
+    assert save_resp.status_code == 200
+    assert output_path.exists()

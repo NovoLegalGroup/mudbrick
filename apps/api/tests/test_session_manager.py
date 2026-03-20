@@ -38,6 +38,22 @@ class TestSessionManager:
         version_path = session_manager._version_pdf_path(sid, 1)
         assert version_path.exists()
 
+    def test_create_session_from_bytes(
+        self, session_manager: SessionManager, sample_pdf_bytes: bytes
+    ):
+        """Generated PDFs can create sessions without a source file on disk."""
+        meta = session_manager.create_session_from_bytes(
+            "generated.pdf",
+            sample_pdf_bytes,
+            operation="generated",
+        )
+
+        assert meta.file_path == ""
+        assert meta.file_name == "generated.pdf"
+        assert meta.file_size == len(sample_pdf_bytes)
+        assert meta.operations[0].operation == "generated"
+        assert session_manager.get_current_pdf_bytes(meta.session_id) == sample_pdf_bytes
+
     def test_open_file_not_found(self, session_manager: SessionManager):
         """Opening a non-existent file raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError):

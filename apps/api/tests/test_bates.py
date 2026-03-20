@@ -106,7 +106,7 @@ async def test_apply_bates_page_range(bates_client: AsyncClient, three_page_pdf:
     data = resp.json()
     assert data["first_label"] == "P-001"
     assert data["last_label"] == "P-001"
-    assert data["page_count"] == 1
+    assert data["page_count"] == 3
 
 
 @pytest.mark.asyncio

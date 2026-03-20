@@ -115,7 +115,7 @@ async def test_fill_form_fields(forms_client: AsyncClient, pdf_with_forms: Path)
     assert resp.status_code == 200
     data = resp.json()
     assert data["success"] is True
-    assert data["updated"] >= 2
+    assert data["fields_updated"] >= 2
 
 
 @pytest.mark.asyncio
@@ -145,8 +145,9 @@ async def test_export_form_data(forms_client: AsyncClient, pdf_with_forms: Path)
     resp = await forms_client.get(f"/api/forms/{sid}/export")
     assert resp.status_code == 200
     data = resp.json()
-    assert "full_name" in data
-    assert data["full_name"] == "Export Test"
+    assert data["success"] is True
+    assert data["format"] == "json"
+    assert data["data"]["full_name"] == "Export Test"
 
 
 @pytest.mark.asyncio

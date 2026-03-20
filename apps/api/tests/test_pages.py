@@ -4,6 +4,7 @@ Mudbrick v2 -- Tests for Page Operations Router (Desktop / File-Path Based)
 
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 import fitz
@@ -44,6 +45,30 @@ def multi_page_pdf_file(tmp_path: Path) -> Path:
     return pdf_path
 
 
+@pytest.fixture
+def insert_source_pdf_file(tmp_path: Path) -> Path:
+    """Create a 2-page PDF used as an insert/replace source."""
+    doc = fitz.open()
+    for i in range(2):
+        page = doc.new_page(width=612, height=792)
+        page.insert_text((72, 72), f"Inserted {i + 1}", fontsize=16)
+    pdf_path = tmp_path / "insert-source.pdf"
+    doc.save(str(pdf_path))
+    doc.close()
+    return pdf_path
+
+
+@pytest.fixture
+def replacement_image_file(tmp_path: Path) -> Path:
+    """Create a tiny PNG image file for page replacement tests."""
+    png_bytes = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnM2eAAAAAASUVORK5CYII="
+    )
+    image_path = tmp_path / "replacement.png"
+    image_path.write_bytes(png_bytes)
+    return image_path
+
+
 async def open_file(client: AsyncClient, file_path: Path) -> str:
     """Open a PDF by path and return the session ID."""
     resp = await client.post(
@@ -52,6 +77,16 @@ async def open_file(client: AsyncClient, file_path: Path) -> str:
     )
     assert resp.status_code == 200
     return resp.json()["session_id"]
+
+
+def get_page_texts(sm: SessionManager, sid: str) -> list[str]:
+    pdf_bytes = sm.get_current_pdf_bytes(sid)
+    assert pdf_bytes is not None
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        return [doc[i].get_text("text") for i in range(doc.page_count)]
+    finally:
+        doc.close()
 
 
 @pytest.mark.asyncio
@@ -123,3 +158,80 @@ class TestPageOperations:
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "image/png"
         assert resp.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    async def test_duplicate_page(
+        self,
+        page_client: AsyncClient,
+        test_session_mgr: SessionManager,
+        multi_page_pdf_file: Path,
+    ):
+        sid = await open_file(page_client, multi_page_pdf_file)
+        resp = await page_client.post(
+            f"/api/pages/{sid}/duplicate",
+            json={"pages": [2]},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["page_count"] == 6
+
+        page_texts = get_page_texts(test_session_mgr, sid)
+        assert "Page 2" in page_texts[1]
+        assert "Page 2" in page_texts[2]
+        assert "Page 3" in page_texts[3]
+
+    async def test_insert_pages_from_pdf(
+        self,
+        page_client: AsyncClient,
+        test_session_mgr: SessionManager,
+        multi_page_pdf_file: Path,
+        insert_source_pdf_file: Path,
+    ):
+        sid = await open_file(page_client, multi_page_pdf_file)
+        resp = await page_client.post(
+            f"/api/pages/{sid}/insert-from-file",
+            json={"file_path": str(insert_source_pdf_file), "after": 2},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["page_count"] == 7
+
+        page_texts = get_page_texts(test_session_mgr, sid)
+        assert "Page 2" in page_texts[1]
+        assert "Inserted 1" in page_texts[2]
+        assert "Inserted 2" in page_texts[3]
+        assert "Page 3" in page_texts[4]
+
+    async def test_replace_page_with_pdf_page(
+        self,
+        page_client: AsyncClient,
+        test_session_mgr: SessionManager,
+        multi_page_pdf_file: Path,
+        insert_source_pdf_file: Path,
+    ):
+        sid = await open_file(page_client, multi_page_pdf_file)
+        resp = await page_client.post(
+            f"/api/pages/{sid}/replace",
+            json={"page": 3, "file_path": str(insert_source_pdf_file), "source_page": 2},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["page_count"] == 5
+
+        page_texts = get_page_texts(test_session_mgr, sid)
+        assert "Inserted 2" in page_texts[2]
+        assert "Page 3" not in page_texts[2]
+
+    async def test_replace_page_with_image(
+        self,
+        page_client: AsyncClient,
+        test_session_mgr: SessionManager,
+        multi_page_pdf_file: Path,
+        replacement_image_file: Path,
+    ):
+        sid = await open_file(page_client, multi_page_pdf_file)
+        resp = await page_client.post(
+            f"/api/pages/{sid}/replace",
+            json={"page": 2, "file_path": str(replacement_image_file)},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["page_count"] == 5
+
+        page_texts = get_page_texts(test_session_mgr, sid)
+        assert "Page 2" not in page_texts[1]
