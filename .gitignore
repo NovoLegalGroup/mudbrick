@@ -7,6 +7,8 @@ Thumbs.db
 
 # Node modules (if any get installed)
 node_modules/
+
+# Vercel (legacy, now desktop app)
 .vercel
 
 # Reference screenshots (not source code)
@@ -21,3 +23,44 @@ Mudbrick-UI-Mockup.html
 
 # Claude Code MCP config (may contain tokens)
 .mcp.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+apps/api/.pytest-tmp*/
+apps/api/pytest-cache-files-*/
+
+# Frontend build
+apps/web/dist/
+apps/web/tsconfig.tsbuildinfo
+
+# Tauri build
+src-tauri/target/
+
+# Logs
+*.log
+apps/api/logs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Lock files (generated)
+pnpm-lock.yaml
+
+# PyInstaller
+apps/api/dist/
+apps/api/build/
+*.spec
