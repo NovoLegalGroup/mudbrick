@@ -818,9 +818,14 @@ function goToPage(pageNum) {
   updatePageNav();
   highlightActiveThumbnail();
 
-  // Scroll thumbnail into view
+  // Scroll thumbnail into view (within thumbnail list only — prevent app-level scroll)
   const thumb = DOM.thumbnailList.querySelector(`[data-page="${clamped}"]`);
-  if (thumb) thumb.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  if (thumb) {
+    thumb.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    // Prevent scrollIntoView from scrolling the #app grid container
+    DOM.app.scrollLeft = 0;
+    DOM.app.scrollTop = 0;
+  }
 
   // Scroll canvas area to top on page change
   DOM.canvasArea.scrollTo({ top: 0, behavior: 'smooth' });
