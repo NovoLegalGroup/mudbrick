@@ -94,26 +94,7 @@ import { trapFocus as a11yTrapFocus, releaseFocus as a11yReleaseFocus, announceT
 import { initOnboarding, showTip } from './onboarding.js';
 import { initMenuActions } from './menu-actions.js';
 import { parseIntegrationParams, postToCallback } from './integration.js';
-
-/* ═══════════════════ State ═══════════════════ */
-
-const State = {
-  pdfDoc: null,
-  pdfBytes: null,
-  fileName: '',
-  fileSize: 0,
-  currentPage: 1,
-  totalPages: 0,
-  zoom: 1.0,
-  pageAnnotations: {},
-  activeTool: 'select',
-  sidebarOpen: true,
-  panelOpen: false,
-  formFields: [],  // detected form field descriptors
-  pdfLibDoc: null,  // pdf-lib document for form support
-  _viewport: null,  // cached viewport for find highlights
-  integration: null, // integration params when launched from external dashboard
-};
+import State from './state.js';
 
 /* ═══════════════════ DOM References ═══════════════════ */
 
