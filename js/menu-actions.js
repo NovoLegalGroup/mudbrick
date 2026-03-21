@@ -17,8 +17,6 @@ export function initMenuActions() {
     'f': 'File',
     'e': 'Edit',
     'v': 'View',
-    'i': 'Insert',
-    't': 'Tools',
     'h': 'Help',
   };
 
