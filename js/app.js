@@ -47,6 +47,7 @@ import { icon } from './icons.js';
 import {
   detectFormFields, detectFormFieldsPdfJs, clearFormOverlay,
   writeFormValues, resetFormState,
+  startFormBackup, restoreFormBackup,
 } from './forms.js';
 
 import {
@@ -120,6 +121,12 @@ window.selectTool = selectTool;
 async function boot() {
   // Initialize centralized error handling first (before anything else)
   initErrorHandler();
+
+  window.addEventListener('unhandledrejection', (e) => {
+    console.error('Unhandled rejection:', e.reason);
+    toast('Something went wrong. Try reloading if the editor is unresponsive.', 'error');
+  });
+
   resolveDOMRefs();
 
   // Initialize new icon rail + flyout panel UI
@@ -319,6 +326,11 @@ function showRecoveryBanner(fileName, timestamp) {
         if (data.pageAnnotations && Object.keys(data.pageAnnotations).length > 0) {
           State.pageAnnotations = data.pageAnnotations;
           loadPageAnnotations(State.currentPage);
+        }
+        // Restore form field values from sessionStorage backup
+        const restoredCount = restoreFormBackup();
+        if (restoredCount > 0) {
+          console.log(`Restored ${restoredCount} form field value(s) from backup`);
         }
         toast('Session recovered successfully.', 'success');
         await clearRecoveryData();
@@ -612,6 +624,7 @@ async function openPDF(bytes, fileName, fileSize) {
 
   if (State.formFields.length > 0) {
     toast(`Detected ${State.formFields.length} form field${State.formFields.length !== 1 ? 's' : ''}`, 'info');
+    startFormBackup();
   }
 
   // Add to recent files
