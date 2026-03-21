@@ -95,45 +95,7 @@ import { initOnboarding, showTip } from './onboarding.js';
 import { initMenuActions } from './menu-actions.js';
 import { parseIntegrationParams, postToCallback } from './integration.js';
 import State from './state.js';
-
-/* ═══════════════════ DOM References ═══════════════════ */
-
-const _nullEl = new Proxy({}, { get: () => () => {}, set: () => true });
-const $ = id => document.getElementById(id) || _nullEl;
-
-const DOM = {
-  welcomeScreen: $('welcome-screen'),
-  app: $('app'),
-  pdfCanvas: $('pdf-canvas'),
-  textLayer: $('text-layer'),
-  fabricWrapper: $('fabric-canvas-wrapper'),
-  canvasArea: $('canvas-area'),
-  pageContainer: $('page-container'),
-  thumbnailList: $('thumbnail-list'),
-  sidebar: $('sidebar'),
-  pageInput: $('page-input'),
-  totalPages: $('total-pages'),
-  zoomBtn: $('btn-zoom-level'),
-  statusFilename: $('status-filename'),
-  statusBarFilename: $('statusbar-filename'),
-  statusPagesSize: $('status-pages-size'),
-  statusZoom: $('status-zoom'),
-  statusBates: $('status-bates'),
-  statusBadgeEncrypted: $('status-badge-encrypted'),
-  statusBadgeTagged: $('status-badge-tagged'),
-  statusZoomIn: $('status-zoom-in'),
-  statusZoomOut: $('status-zoom-out'),
-  fileInput: $('file-input'),
-  btnPrev: $('btn-prev-page'),
-  btnNext: $('btn-next-page'),
-  btnFirst: $('btn-first-page'),
-  btnLast: $('btn-last-page'),
-  propertiesPanel: $('properties-panel'),
-  btnUndo: $('btn-undo'),
-  btnRedo: $('btn-redo'),
-  btnEditText: $('btn-edit-text'),
-  btnEditImage: $('btn-edit-image'),
-};
+import { DOM, $, resolveDOMRefs } from './dom-refs.js';
 
 /* ═══════════════════ Initialization ═══════════════════ */
 
@@ -149,6 +111,7 @@ function replaceIcons() {
 async function boot() {
   // Initialize centralized error handling first (before anything else)
   initErrorHandler();
+  resolveDOMRefs();
 
   // Initialize new icon rail + flyout panel UI
   if (typeof UIController !== 'undefined') {
