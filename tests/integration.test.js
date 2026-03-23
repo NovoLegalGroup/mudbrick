@@ -69,15 +69,29 @@ describe('parseIntegrationParams', () => {
     expect(parseIntegrationParams()).toBeNull();
   });
 
-  it('parses fileUrl with all params', () => {
+  it('parses fileUrl with all params (work order)', () => {
     setSearch('?fileUrl=https://example.com/doc.pdf&woId=wo-123&callbackUrl=http://localhost:3000/api/cb&returnUrl=http://localhost:3000/orders/123&fileName=my-form.pdf');
     const result = parseIntegrationParams();
     expect(result).toEqual({
       fileUrl: 'https://example.com/doc.pdf',
       woId: 'wo-123',
+      docId: '',
       callbackUrl: 'http://localhost:3000/api/cb',
       returnUrl: 'http://localhost:3000/orders/123',
       fileName: 'my-form.pdf',
+    });
+  });
+
+  it('parses fileUrl with docId (case document)', () => {
+    setSearch('?fileUrl=https://example.com/doc.pdf&docId=doc-456&callbackUrl=http://localhost:3000/api/cb&returnUrl=http://localhost:3000/cases/123&fileName=evidence.pdf');
+    const result = parseIntegrationParams();
+    expect(result).toEqual({
+      fileUrl: 'https://example.com/doc.pdf',
+      woId: '',
+      docId: 'doc-456',
+      callbackUrl: 'http://localhost:3000/api/cb',
+      returnUrl: 'http://localhost:3000/cases/123',
+      fileName: 'evidence.pdf',
     });
   });
 
@@ -99,10 +113,11 @@ describe('parseIntegrationParams', () => {
     expect(result.fileName).toBe('form.pdf');
   });
 
-  it('defaults woId to empty string', () => {
+  it('defaults woId and docId to empty string', () => {
     setSearch('?fileUrl=https://example.com/doc.pdf');
     const result = parseIntegrationParams();
     expect(result.woId).toBe('');
+    expect(result.docId).toBe('');
   });
 
   it('strips callbackUrl when origin is not allowed', () => {
@@ -155,6 +170,26 @@ describe('postToCallback', () => {
     expect(formData.get('file')).toBeInstanceOf(Blob);
 
     expect(result).toEqual(mockResponse);
+  });
+
+  it('POSTs multipart form data with docId for case documents', async () => {
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ document: { id: 'doc-456' } }),
+    });
+
+    const pdfBytes = new Uint8Array([37, 80, 68, 70]);
+    await postToCallback(
+      'http://localhost:3000/api/callback',
+      pdfBytes,
+      { docId: 'doc-456', fileName: 'evidence.pdf' },
+    );
+
+    const [, opts] = fetch.mock.calls[0];
+    const formData = opts.body;
+    expect(formData.get('docId')).toBe('doc-456');
+    expect(formData.get('fileName')).toBe('evidence.pdf');
+    expect(formData.get('woId')).toBeNull(); // not sent when empty
   });
 
   it('throws on HTTP error', async () => {

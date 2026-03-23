@@ -40,6 +40,7 @@ export function parseIntegrationParams() {
   return {
     fileUrl,
     woId: params.get('woId') || '',
+    docId: params.get('docId') || '',
     callbackUrl: callbackUrl && isAllowedCallbackOrigin(callbackUrl) ? callbackUrl : '',
     returnUrl: params.get('returnUrl') || '',
     fileName: params.get('fileName') || fileUrl.split('/').pop()?.split('?')[0] || 'document.pdf',
@@ -50,14 +51,16 @@ export function parseIntegrationParams() {
  * POST saved PDF bytes back to callbackUrl as multipart/form-data.
  * @param {string} callbackUrl - URL to POST to
  * @param {Uint8Array} pdfBytes - Saved PDF bytes
- * @param {Object} meta - { woId, fileName }
+ * @param {Object} meta - { woId, docId, fileName }
  * @returns {Promise<Object>} Parsed JSON response
  */
-export async function postToCallback(callbackUrl, pdfBytes, { woId, fileName }) {
+export async function postToCallback(callbackUrl, pdfBytes, { woId, docId, fileName }) {
   const form = new FormData();
   form.append('file', new Blob([pdfBytes], { type: 'application/pdf' }), fileName);
-  form.append('woId', woId);
   form.append('fileName', fileName);
+  // Send the appropriate ID depending on the callback context
+  if (docId) form.append('docId', docId);
+  if (woId) form.append('woId', woId);
 
   const resp = await fetch(callbackUrl, { method: 'POST', body: form });
   if (!resp.ok) throw new Error(`Callback failed: HTTP ${resp.status}`);

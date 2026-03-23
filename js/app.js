@@ -1599,6 +1599,7 @@ async function handleSave() {
         toast('Sending to dashboard\u2026', 'info');
         await postToCallback(State.integration.callbackUrl, result.bytes, {
           woId: State.integration.woId,
+          docId: State.integration.docId,
           fileName: State.integration.fileName,
         });
         if (State.integration.returnUrl) {
